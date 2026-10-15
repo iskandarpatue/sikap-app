@@ -74,13 +74,13 @@ export default function KartuMurid({ muridList, pengaturan, onClose }) {
                         <div style={{ padding: '2px', backgroundColor: 'white' }}>
                           <QRCode value={murid.barcode_data || '000'} size={40} />
                         </div>
-                        <div style={{ textAlign: 'center', fontSize: '7px', lineHeight: '1.2', width: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <div>Kepala Sekolah,</div>
+                        <div style={{ textAlign: 'center', lineHeight: '1.1', width: '95px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <div style={{ fontSize: '6px', color: '#374151' }}>Kepala Sekolah,</div>
                           <div style={{ height: '30px', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '2px 0' }}>
                             {ttdKepsek ? <img src={ttdKepsek} alt="TTD" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} /> : <div style={{ height: '25px' }}></div>}
                           </div>
-                          <div style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{kepsekNama}</div>
-                          <div>NIP. {kepsekNIP}</div>
+                          <div style={{ fontWeight: 'bold', textDecoration: 'underline', fontSize: '6.5px', color: '#111827' }}>{kepsekNama}</div>
+                          <div style={{ fontSize: '5.5px', color: '#374151' }}>NIP. {kepsekNIP}</div>
                         </div>
                       </div>
                     </div>
@@ -103,13 +103,13 @@ export default function KartuMurid({ muridList, pengaturan, onClose }) {
                     <div style={{ padding: '2px', backgroundColor: 'white' }}>
                       <QRCode value={murid.barcode_data || '000'} size={40} />
                     </div>
-                    <div style={{ textAlign: 'center', fontSize: '7px', lineHeight: '1.2', width: '80px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <div>Kepala Perpustakaan,</div>
+                    <div style={{ textAlign: 'center', lineHeight: '1.1', width: '95px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <div style={{ fontSize: '6px', color: '#374151' }}>Kepala Perpustakaan,</div>
                       <div style={{ height: '30px', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '2px 0' }}>
                         {ttdPerpus ? <img src={ttdPerpus} alt="TTD" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} /> : <div style={{ height: '22px' }}></div>}
                       </div>
-                      <div style={{ fontWeight: 'bold', textDecoration: 'underline' }}>{perpusNama}</div>
-                      <div>NIP. {perpusNIP}</div>
+                      <div style={{ fontWeight: 'bold', textDecoration: 'underline', fontSize: '6.5px', color: '#111827' }}>{perpusNama}</div>
+                      <div style={{ fontSize: '5.5px', color: '#374151' }}>NIP. {perpusNIP}</div>
                     </div>
                   </div>
                 </div>
