@@ -14,45 +14,25 @@ export default function ScanPerpustakaan() {
   const [filterKelas, setFilterKelas] = useState('Semua Kelas')
 
   const modeRef = useRef(mode)
+  const loadingRef = useRef(loading)
   const scannerSudahAktif = useRef(false)
+  const prosesScanRef = useRef()
 
   useEffect(() => { modeRef.current = mode }, [mode])
+  useEffect(() => { loadingRef.current = loading }, [loading])
 
   const ambilLogHariIni = async () => {
     const now = new Date()
     const tanggalHariIni = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
-    const { data } = await supabase
-      .from('kunjungan_perpus')
-      .select('*')
-      .eq('tanggal', tanggalHariIni)
-      .order('id', { ascending: false })
-      
+    const { data } = await supabase.from('kunjungan_perpus').select('*').eq('tanggal', tanggalHariIni).order('id', { ascending: false })
     if (data) setLogHariIni(data)
   }
 
   useEffect(() => { ambilLogHariIni() }, [])
 
-  useEffect(() => {
-    if (scannerSudahAktif.current) return
-    scannerSudahAktif.current = true
-
-    const scanner = new Html5QrcodeScanner("reader", { fps: 5, qrbox: { width: 250, height: 250 } }, false)
-
-    scanner.render(async (decodedText) => {
-      scanner.pause(true)
-      await prosesScan(decodedText, modeRef.current)
-      setTimeout(() => { try { scanner.resume() } catch(e) {} }, 3000)
-    }, () => {})
-
-    return () => {
-      scannerSudahAktif.current = false
-      scanner.clear().catch(e => console.log(e))
-    }
-  }, []) 
-
   const prosesScan = async (nisn_scan, tujuanSaatIni) => {
-    if (loading) return
+    if (loadingRef.current) return
     setLoading(true)
     setPesan('Mencatat data kunjungan...')
     setWarnaPesan('#059669')
@@ -86,12 +66,64 @@ export default function ScanPerpustakaan() {
       ambilLogHariIni() 
 
     } catch (error) {
-      setPesan('Terjadi kesalahan Server.')
+      let pesanAsli = 'Error Server';
+      if (error && error.message) pesanAsli = error.message;
+      setPesan(`Error: ${pesanAsli}`)
       setWarnaPesan('#ef4444')
       setIkonPesan('❌')
     }
     setLoading(false)
   }
+
+  useEffect(() => { prosesScanRef.current = prosesScan }, [prosesScan])
+
+  // ==========================================
+  // FITUR PENDETEKSI SCANNER FISIK (USB/BLUETOOTH)
+  // ==========================================
+  useEffect(() => {
+    let barcodeBuffer = ''
+    let lastKeyTime = Date.now()
+
+    const handleKeyDown = (e) => {
+      const currentTime = Date.now()
+      if (currentTime - lastKeyTime > 100) { barcodeBuffer = '' }
+      lastKeyTime = currentTime
+
+      if (e.key === 'Enter') {
+        if (barcodeBuffer.length > 0) {
+          e.preventDefault()
+          prosesScanRef.current(barcodeBuffer, modeRef.current)
+          barcodeBuffer = ''
+        }
+      } else if (e.key.length === 1) { 
+        barcodeBuffer += e.key
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // ==========================================
+  // KAMERA LAPTOP / HP (CADANGAN)
+  // ==========================================
+  useEffect(() => {
+    if (scannerSudahAktif.current) return
+    scannerSudahAktif.current = true
+
+    const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false)
+
+    scanner.render(async (decodedText) => {
+      scanner.pause(true)
+      await prosesScanRef.current(decodedText, modeRef.current)
+      setTimeout(() => { try { scanner.resume() } catch(e) {} }, 3000)
+    }, () => {})
+
+    return () => {
+      scannerSudahAktif.current = false
+      scanner.clear().catch(e => console.log(e))
+    }
+  }, []) 
 
   const hapusLog = async (id, namaMurid, tujuan) => {
     if(!window.confirm(`Hapus data ${tujuan} milik ${namaMurid}?`)) return
@@ -113,13 +145,14 @@ export default function ScanPerpustakaan() {
     <div style={{ paddingBottom: '40px' }}>
       
       {/* HEADER HERO SECTION */}
-      <div style={{ background: 'linear-gradient(135deg, #064e3b 0%, #059669 100%)', padding: '25px', borderRadius: '16px', color: 'white', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: '0 10px 25px rgba(5, 150, 105, 0.4)', marginBottom: '25px' }}>
-        <div style={{ fontSize: '50px', backgroundColor: 'rgba(255,255,255,0.2)', width: '80px', height: '80px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '50%' }}>
-          📚
+      <div style={{ background: 'linear-gradient(135deg, #064e3b 0%, #059669 100%)', padding: '25px', borderRadius: '16px', color: 'white', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: '0 10px 25px rgba(5, 150, 105, 0.4)', marginBottom: '25px', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: '15px', right: '20px', backgroundColor: '#10b981', color: 'white', padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+          📟 Alat Scanner Fisik: READY
         </div>
+        <div style={{ fontSize: '50px', backgroundColor: 'rgba(255,255,255,0.2)', width: '80px', height: '80px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '50%' }}>📚</div>
         <div>
           <h2 style={{ margin: 0, fontSize: '26px', letterSpacing: '0.5px' }}>Layanan Perpustakaan Digital</h2>
-          <p style={{ margin: '5px 0 0 0', color: '#a7f3d0', fontSize: '15px' }}>Pilih mode di bawah ini sebelum memindai kartu pengunjung.</p>
+          <p style={{ margin: '5px 0 0 0', color: '#a7f3d0', fontSize: '15px' }}>Pilih mode, lalu tembak kartu menggunakan scanner fisik.</p>
         </div>
       </div>
 
@@ -152,7 +185,7 @@ export default function ScanPerpustakaan() {
         <div style={{ flex: 1, minWidth: '320px', backgroundColor: 'white', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
             <span style={{ fontSize: '20px' }}>📷</span>
-            <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>Kamera Scanner</h3>
+            <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>Kamera Scanner (Cadangan)</h3>
           </div>
           <div style={{ borderRadius: '12px', overflow: 'hidden', border: `3px dashed ${mode === 'Membaca' ? '#bfdbfe' : mode === 'Pinjam Buku' ? '#fde68a' : '#bbf7d0'}` }}>
             <div id="reader" style={{ width: '100%', border: 'none' }}></div>
@@ -173,9 +206,7 @@ export default function ScanPerpustakaan() {
                 {muridTerakhir.foto_url ? <img src={muridTerakhir.foto_url} alt="Foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px' }}>👤</div>}
               </div>
               <div>
-                <span style={{ backgroundColor: '#d1fae5', color: '#047857', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', display: 'inline-block', marginBottom: '8px' }}>
-                  🎓 {muridTerakhir.kelas}
-                </span>
+                <span style={{ backgroundColor: '#d1fae5', color: '#047857', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', display: 'inline-block', marginBottom: '8px' }}>🎓 {muridTerakhir.kelas}</span>
                 <h4 style={{ margin: '0 0 5px 0', color: '#0f172a', fontSize: '22px' }}>{muridTerakhir.nama}</h4>
                 <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>NISN: <strong>{muridTerakhir.nisn}</strong></p>
               </div>
@@ -186,13 +217,11 @@ export default function ScanPerpustakaan() {
 
       {/* TABEL LOG KUNJUNGAN LIVE */}
       <div style={{ marginTop: '30px', backgroundColor: 'white', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
-        
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '24px' }}>📋</span>
             <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>Log Kunjungan <span style={{ color: '#059669', fontWeight: 'bold' }}>({logHariIni.length} Orang)</span></h3>
           </div>
-          
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f8fafc', padding: '8px 15px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
             <span style={{ fontSize: '14px' }}>🎯 Filter:</span>
             <select value={filterKelas} onChange={(e) => setFilterKelas(e.target.value)} style={{ padding: '6px', border: 'none', backgroundColor: 'transparent', fontSize: '14px', fontWeight: 'bold', color: '#1e293b', outline: 'none', cursor: 'pointer' }}>
@@ -223,22 +252,14 @@ export default function ScanPerpustakaan() {
                     <td style={{ padding: '15px', color: '#64748b' }}>{index + 1}</td>
                     <td style={{ padding: '15px', fontWeight: 'bold', color: '#0f172a' }}>{row.nama}</td>
                     <td style={{ padding: '15px', color: '#475569' }}>{row.kelas}</td>
-                    <td style={{ padding: '15px', textAlign: 'center', fontWeight: 'bold', color: '#475569' }}>
-                      {formatJam(row.waktu_kunjung)}
-                    </td>
+                    <td style={{ padding: '15px', textAlign: 'center', fontWeight: 'bold', color: '#475569' }}>{formatJam(row.waktu_kunjung)}</td>
                     <td style={{ padding: '15px', textAlign: 'center' }}>
-                      <span style={{ 
-                        backgroundColor: row.tujuan === 'Membaca' ? '#eff6ff' : row.tujuan === 'Pinjam Buku' ? '#fef3c7' : '#dcfce7', 
-                        color: row.tujuan === 'Membaca' ? '#2563eb' : row.tujuan === 'Pinjam Buku' ? '#d97706' : '#166534', 
-                        padding: '6px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '5px' 
-                      }}>
+                      <span style={{ backgroundColor: row.tujuan === 'Membaca' ? '#eff6ff' : row.tujuan === 'Pinjam Buku' ? '#fef3c7' : '#dcfce7', color: row.tujuan === 'Membaca' ? '#2563eb' : row.tujuan === 'Pinjam Buku' ? '#d97706' : '#166534', padding: '6px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                         {row.tujuan === 'Membaca' ? '📖' : row.tujuan === 'Pinjam Buku' ? '📤' : '📥'} {row.tujuan}
                       </span>
                     </td>
                     <td style={{ padding: '15px', textAlign: 'center' }}>
-                      <button onClick={() => hapusLog(row.id, row.nama, row.tujuan)} style={{ padding: '8px', backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }} title="Hapus Data">
-                        🗑️
-                      </button>
+                      <button onClick={() => hapusLog(row.id, row.nama, row.tujuan)} style={{ padding: '8px', backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }} title="Hapus Data">🗑️</button>
                     </td>
                   </tr>
                 ))
