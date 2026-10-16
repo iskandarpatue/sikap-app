@@ -14,50 +14,25 @@ export default function ScanKehadiran() {
   const [filterKelas, setFilterKelas] = useState('Semua Kelas')
   
   const modeRef = useRef(mode)
+  const loadingRef = useRef(loading)
   const scannerSudahAktif = useRef(false)
+  const prosesScanRef = useRef()
 
   useEffect(() => { modeRef.current = mode }, [mode])
+  useEffect(() => { loadingRef.current = loading }, [loading])
 
   const ambilLogHariIni = async () => {
     const now = new Date()
     const tanggalHariIni = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-
-    const { data } = await supabase
-      .from('kehadiran')
-      .select('*')
-      .eq('tanggal', tanggalHariIni)
-      .order('id', { ascending: false })
-      
+    const { data } = await supabase.from('kehadiran').select('*').eq('tanggal', tanggalHariIni).order('id', { ascending: false })
     if (data) setLogHariIni(data)
   }
 
   useEffect(() => { ambilLogHariIni() }, [])
 
-  useEffect(() => {
-    if (scannerSudahAktif.current) return
-    scannerSudahAktif.current = true
-
-    // Meningkatkan resolusi scanner untuk membantu kamera laptop
-    const scanner = new Html5QrcodeScanner(
-      "reader", 
-      { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, 
-      false
-    )
-
-    scanner.render(async (decodedText) => {
-      scanner.pause(true)
-      await prosesScan(decodedText, modeRef.current)
-      setTimeout(() => { try { scanner.resume() } catch(e) {} }, 3000)
-    }, () => {})
-
-    return () => {
-      scannerSudahAktif.current = false
-      scanner.clear().catch(e => console.log(e))
-    }
-  }, []) 
-
+  // Fungsi Inti Proses Scan
   const prosesScan = async (nisn_scan, modeSaatIni) => {
-    if (loading) return
+    if (loadingRef.current) return
     setLoading(true)
     setPesan('Mencari data murid...')
     setWarnaPesan('#3b82f6')
@@ -75,7 +50,6 @@ export default function ScanKehadiran() {
       }
 
       setMuridTerakhir(murid)
-
       const now = new Date()
       const tanggalHariIni = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       const waktuLengkapSupabase = now.toISOString() 
@@ -125,19 +99,66 @@ export default function ScanKehadiran() {
         }
       }
     } catch (error) {
-      console.error("Detail Error Supabase:", error)
-      
-      // Menangkap dan menampilkan error asli dari Supabase ke layar
       let pesanAsli = 'Error tidak diketahui';
       if (error && error.message) pesanAsli = error.message;
       else if (error && error.details) pesanAsli = error.details;
-      
       setPesan(`DB Error: ${pesanAsli}`)
       setWarnaPesan('#ef4444')
       setIkonPesan('❌')
     }
     setLoading(false)
   }
+
+  // Menyimpan referensi prosesScan terbaru agar bisa dipanggil oleh event listener keyboard
+  useEffect(() => { prosesScanRef.current = prosesScan }, [prosesScan])
+
+  // ==========================================
+  // FITUR PENDETEKSI SCANNER FISIK (USB/BLUETOOTH)
+  // ==========================================
+  useEffect(() => {
+    let barcodeBuffer = ''
+    let lastKeyTime = Date.now()
+
+    const handleKeyDown = (e) => {
+      const currentTime = Date.now()
+      // Jika jarak ketikan antar huruf > 100ms, berarti ini ketikan manusia (keyboard biasa), kita abaikan
+      if (currentTime - lastKeyTime > 100) {
+        barcodeBuffer = ''
+      }
+      lastKeyTime = currentTime
+
+      if (e.key === 'Enter') {
+        if (barcodeBuffer.length > 0) {
+          e.preventDefault()
+          prosesScanRef.current(barcodeBuffer, modeRef.current)
+          barcodeBuffer = ''
+        }
+      } else if (e.key.length === 1) { // Hanya tangkap karakter biasa
+        barcodeBuffer += e.key
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // ==========================================
+  // KAMERA LAPTOP / HP (CADANGAN)
+  // ==========================================
+  useEffect(() => {
+    if (scannerSudahAktif.current) return
+    scannerSudahAktif.current = true
+    const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false)
+    scanner.render(async (decodedText) => {
+      scanner.pause(true)
+      await prosesScanRef.current(decodedText, modeRef.current)
+      setTimeout(() => { try { scanner.resume() } catch(e) {} }, 3000)
+    }, () => {})
+    return () => {
+      scannerSudahAktif.current = false
+      scanner.clear().catch(e => console.log(e))
+    }
+  }, []) 
 
   const hapusLog = async (id, namaMurid) => {
     if(!window.confirm(`Hapus data kehadiran ${namaMurid}?`)) return
@@ -159,11 +180,14 @@ export default function ScanKehadiran() {
     <div style={{ paddingBottom: '40px' }}>
       
       {/* HEADER HERO SECTION */}
-      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)', padding: '25px', borderRadius: '16px', color: 'white', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: '0 10px 25px rgba(59, 130, 246, 0.4)', marginBottom: '25px' }}>
+      <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)', padding: '25px', borderRadius: '16px', color: 'white', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: '0 10px 25px rgba(59, 130, 246, 0.4)', marginBottom: '25px', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: '15px', right: '20px', backgroundColor: '#10b981', color: 'white', padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+          📟 Alat Scanner Fisik: READY
+        </div>
         <div style={{ fontSize: '50px', backgroundColor: 'rgba(255,255,255,0.2)', width: '80px', height: '80px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '50%' }}>🏫</div>
         <div>
           <h2 style={{ margin: 0, fontSize: '26px', letterSpacing: '0.5px' }}>Gerbang Kehadiran Murid</h2>
-          <p style={{ margin: '5px 0 0 0', color: '#bfdbfe', fontSize: '15px' }}>Pilih mode Datang/Pulang sebelum melakukan scan kartu.</p>
+          <p style={{ margin: '5px 0 0 0', color: '#bfdbfe', fontSize: '15px' }}>Pilih mode Datang/Pulang, lalu tembak kartu menggunakan scanner.</p>
         </div>
       </div>
 
@@ -195,7 +219,7 @@ export default function ScanKehadiran() {
         <div style={{ flex: 1, minWidth: '320px', backgroundColor: 'white', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
             <span style={{ fontSize: '20px' }}>📷</span>
-            <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>Kamera Scanner</h3>
+            <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>Kamera Scanner (Cadangan)</h3>
           </div>
           <div style={{ borderRadius: '12px', overflow: 'hidden', border: `3px dashed ${mode === 'Datang' ? '#bfdbfe' : '#fde68a'}` }}>
             <div id="reader" style={{ width: '100%', border: 'none' }}></div>
@@ -227,13 +251,11 @@ export default function ScanKehadiran() {
 
       {/* TABEL LIVE */}
       <div style={{ marginTop: '30px', backgroundColor: 'white', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
-        
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '24px' }}>📋</span>
             <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>Daftar Hadir Hari Ini <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>({logHariIni.length} Siswa)</span></h3>
           </div>
-          
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f8fafc', padding: '8px 15px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
             <span style={{ fontSize: '14px' }}>🎯 Filter:</span>
             <select value={filterKelas} onChange={(e) => setFilterKelas(e.target.value)} style={{ padding: '6px', border: 'none', backgroundColor: 'transparent', fontSize: '14px', fontWeight: 'bold', color: '#1e293b', outline: 'none', cursor: 'pointer' }}>
