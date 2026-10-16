@@ -24,10 +24,17 @@ export default function KartuMurid({ muridList, pengaturan, onClose }) {
           #modal-overlay { position: absolute !important; top: 0 !important; left: 0 !important; background: white !important; overflow: visible !important; align-items: flex-start !important; }
           #modal-box { box-shadow: none !important; padding: 0 !important; max-height: none !important; overflow: visible !important; width: 100% !important; max-width: 100% !important; }
           #area-cetak, #area-cetak * { visibility: visible; }
-          #area-cetak { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; padding: 0 !important; background: white !important; display: flex !important; flex-direction: column !important; gap: 15px !important; align-items: center !important; }
+          
+          /* Mengurangi gap agar lebih rapat saat di-print */
+          #area-cetak { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; padding: 0 !important; background: white !important; display: flex !important; flex-direction: column !important; gap: 4px !important; align-items: center !important; }
+          
           .no-print { display: none !important; }
-          @page { size: A4 portrait; margin: 10mm; }
-          .kartu-pasangan { page-break-inside: avoid !important; margin-bottom: 5px !important; }
+          
+          /* Mengecilkan margin kertas dari 10mm menjadi 5mm agar muat 5 pasang kartu (10 kartu) */
+          @page { size: A4 portrait; margin: 5mm; }
+          
+          /* Memperkecil margin bawah per pasangan kartu */
+          .kartu-pasangan { page-break-inside: avoid !important; margin-bottom: 2px !important; }
         }
       `}</style>
 
