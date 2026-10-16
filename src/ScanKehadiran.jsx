@@ -37,7 +37,12 @@ export default function ScanKehadiran() {
     if (scannerSudahAktif.current) return
     scannerSudahAktif.current = true
 
-    const scanner = new Html5QrcodeScanner("reader", { fps: 5, qrbox: { width: 250, height: 250 } }, false)
+    // Meningkatkan resolusi scanner untuk membantu kamera laptop
+    const scanner = new Html5QrcodeScanner(
+      "reader", 
+      { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, 
+      false
+    )
 
     scanner.render(async (decodedText) => {
       scanner.pause(true)
@@ -62,7 +67,7 @@ export default function ScanKehadiran() {
       const { data: murid, error: errMurid } = await supabase.from('students').select('*').eq('barcode_data', nisn_scan).single()
       
       if (errMurid || !murid) {
-        setPesan('Data murid tidak ditemukan!')
+        setPesan('Data murid tidak ditemukan di sistem!')
         setWarnaPesan('#ef4444')
         setIkonPesan('❌')
         setLoading(false)
@@ -73,10 +78,8 @@ export default function ScanKehadiran() {
 
       const now = new Date()
       const tanggalHariIni = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-      const jamTampil = now.toLocaleTimeString('id-ID', { hour12: false }) 
       const waktuLengkapSupabase = now.toISOString() 
 
-      // Cek apakah sudah absen hari ini
       const { data: cekHadir } = await supabase.from('kehadiran').select('*').eq('nisn', murid.nisn).eq('tanggal', tanggalHariIni).maybeSingle()
 
       if (modeSaatIni === 'Datang') {
@@ -122,8 +125,14 @@ export default function ScanKehadiran() {
         }
       }
     } catch (error) {
-      console.error(error)
-      setPesan('Terjadi kesalahan database (Kolom/RLS).')
+      console.error("Detail Error Supabase:", error)
+      
+      // Menangkap dan menampilkan error asli dari Supabase ke layar
+      let pesanAsli = 'Error tidak diketahui';
+      if (error && error.message) pesanAsli = error.message;
+      else if (error && error.details) pesanAsli = error.details;
+      
+      setPesan(`DB Error: ${pesanAsli}`)
       setWarnaPesan('#ef4444')
       setIkonPesan('❌')
     }
