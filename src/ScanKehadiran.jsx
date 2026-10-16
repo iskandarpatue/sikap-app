@@ -3,6 +3,10 @@ import { Html5QrcodeScanner } from 'html5-qrcode'
 import { supabase } from './supabase'
 
 export default function ScanKehadiran() {
+  // === MASUKKAN TOKEN FONNTE BAPAK DI SINI ===
+  const FONNTE_TOKEN = 'xnUg6XoCeoHScJ7pHfeq' 
+  // ===========================================
+
   const [mode, setMode] = useState('Datang')
   const [pesan, setPesan] = useState('Pilih mode, lalu scan kartu murid...')
   const [warnaPesan, setWarnaPesan] = useState('#64748b')
@@ -30,6 +34,19 @@ export default function ScanKehadiran() {
 
   useEffect(() => { ambilLogHariIni() }, [])
 
+  // Fungsi Kirim WA (Berjalan di Latar Belakang)
+  const kirimWA = (nomorOrtu, namaMurid, statusKehadiran, jamHadir) => {
+    if (!nomorOrtu || nomorOrtu.trim() === '') return; // Batal kirim jika nomor HP kosong
+
+    const isiPesan = `*[SIKAP SMAN 1 BATUDAA PANTAI]*\n\nBapak/Ibu Orang Tua/Wali,\nAnanda *${namaMurid}* telah melakukan scan *${statusKehadiran}* pada pukul ${jamHadir}.\n\nTerima kasih.`;
+
+    fetch("https://api.fonnte.com/send", {
+      method: "POST",
+      headers: { "Authorization": FONNTE_TOKEN },
+      body: new URLSearchParams({ target: nomorOrtu, message: isiPesan })
+    }).catch((err) => console.log("Gagal kirim WA:", err)); // Error disembunyikan agar UI tidak macet
+  }
+
   // Fungsi Inti Proses Scan
   const prosesScan = async (nisn_scan, modeSaatIni) => {
     if (loadingRef.current) return
@@ -53,6 +70,7 @@ export default function ScanKehadiran() {
       const now = new Date()
       const tanggalHariIni = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       const waktuLengkapSupabase = now.toISOString() 
+      const jamTampil = now.toLocaleTimeString('id-ID', { hour12: false, hour: '2-digit', minute: '2-digit' }) 
 
       const { data: cekHadir } = await supabase.from('kehadiran').select('*').eq('nisn', murid.nisn).eq('tanggal', tanggalHariIni).maybeSingle()
 
@@ -76,15 +94,22 @@ export default function ScanKehadiran() {
           setWarnaPesan('#10b981')
           setIkonPesan('✅')
           ambilLogHariIni() 
+          
+          // Pemicu WA Datang
+          kirimWA(murid.no_hp_ortu, murid.nama, "DATANG", jamTampil)
         }
       } else if (modeSaatIni === 'Pulang') {
         if (!cekHadir) {
           const { error: errInsert } = await supabase.from('kehadiran').insert([{ nisn: murid.nisn, nama: murid.nama, kelas: murid.kelas, tanggal: tanggalHariIni, waktu_pulang: waktuLengkapSupabase }])
           if (errInsert) throw errInsert
+          
           setPesan(`PULANG BERHASIL: ${murid.nama}`)
           setWarnaPesan('#10b981')
           setIkonPesan('✅')
           ambilLogHariIni()
+          
+          // Pemicu WA Pulang
+          kirimWA(murid.no_hp_ortu, murid.nama, "PULANG", jamTampil)
         } else if (cekHadir.waktu_pulang) {
           setPesan(`${murid.nama} SUDAH SCAN PULANG.`)
           setWarnaPesan('#f59e0b')
@@ -92,10 +117,14 @@ export default function ScanKehadiran() {
         } else {
           const { error: errUpdate } = await supabase.from('kehadiran').update({ waktu_pulang: waktuLengkapSupabase }).eq('id', cekHadir.id)
           if (errUpdate) throw errUpdate
+          
           setPesan(`PULANG BERHASIL: ${murid.nama}`)
           setWarnaPesan('#10b981')
           setIkonPesan('✅')
           ambilLogHariIni()
+          
+          // Pemicu WA Pulang
+          kirimWA(murid.no_hp_ortu, murid.nama, "PULANG", jamTampil)
         }
       }
     } catch (error) {
@@ -109,22 +138,17 @@ export default function ScanKehadiran() {
     setLoading(false)
   }
 
-  // Menyimpan referensi prosesScan terbaru agar bisa dipanggil oleh event listener keyboard
   useEffect(() => { prosesScanRef.current = prosesScan }, [prosesScan])
 
   // ==========================================
-  // FITUR PENDETEKSI SCANNER FISIK (USB/BLUETOOTH)
+  // PENDETEKSI SCANNER FISIK (USB/BLUETOOTH)
   // ==========================================
   useEffect(() => {
     let barcodeBuffer = ''
     let lastKeyTime = Date.now()
-
     const handleKeyDown = (e) => {
       const currentTime = Date.now()
-      // Jika jarak ketikan antar huruf > 100ms, berarti ini ketikan manusia (keyboard biasa), kita abaikan
-      if (currentTime - lastKeyTime > 100) {
-        barcodeBuffer = ''
-      }
+      if (currentTime - lastKeyTime > 100) { barcodeBuffer = '' }
       lastKeyTime = currentTime
 
       if (e.key === 'Enter') {
@@ -133,17 +157,16 @@ export default function ScanKehadiran() {
           prosesScanRef.current(barcodeBuffer, modeRef.current)
           barcodeBuffer = ''
         }
-      } else if (e.key.length === 1) { // Hanya tangkap karakter biasa
+      } else if (e.key.length === 1) { 
         barcodeBuffer += e.key
       }
     }
-
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
   // ==========================================
-  // KAMERA LAPTOP / HP (CADANGAN)
+  // KAMERA LAPTOP / HP
   // ==========================================
   useEffect(() => {
     if (scannerSudahAktif.current) return
@@ -187,7 +210,7 @@ export default function ScanKehadiran() {
         <div style={{ fontSize: '50px', backgroundColor: 'rgba(255,255,255,0.2)', width: '80px', height: '80px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '50%' }}>🏫</div>
         <div>
           <h2 style={{ margin: 0, fontSize: '26px', letterSpacing: '0.5px' }}>Gerbang Kehadiran Murid</h2>
-          <p style={{ margin: '5px 0 0 0', color: '#bfdbfe', fontSize: '15px' }}>Pilih mode Datang/Pulang, lalu tembak kartu menggunakan scanner.</p>
+          <p style={{ margin: '5px 0 0 0', color: '#bfdbfe', fontSize: '15px' }}>Pilih mode Datang/Pulang, lalu tembak kartu.</p>
         </div>
       </div>
 
@@ -243,6 +266,11 @@ export default function ScanKehadiran() {
                 <span style={{ backgroundColor: '#dbeafe', color: '#1d4ed8', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', display: 'inline-block', marginBottom: '8px' }}>🎓 {muridTerakhir.kelas}</span>
                 <h4 style={{ margin: '0 0 5px 0', color: '#0f172a', fontSize: '22px' }}>{muridTerakhir.nama}</h4>
                 <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>NISN: <strong>{muridTerakhir.nisn}</strong></p>
+                
+                {/* Indikator Status WA */}
+                <div style={{ marginTop: '10px', display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 8px', backgroundColor: muridTerakhir.no_hp_ortu ? '#dcfce7' : '#fee2e2', borderRadius: '6px', fontSize: '11px', color: muridTerakhir.no_hp_ortu ? '#166534' : '#991b1b', fontWeight: 'bold' }}>
+                  {muridTerakhir.no_hp_ortu ? `📱 WA Ortu: ${muridTerakhir.no_hp_ortu}` : '⚠️ No HP Ortu Belum Diisi'}
+                </div>
               </div>
             </div>
           )}
