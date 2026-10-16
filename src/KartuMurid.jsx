@@ -3,7 +3,6 @@ import QRCode from 'react-qr-code'
 export default function KartuMurid({ muridList, pengaturan, onClose }) {
   if (!muridList || muridList.length === 0) return null
 
-  // Pastikan data pengaturan aman meskipun belum tersimpan dengan baik
   const { 
     kepsekNama = 'Nama Kepsek', 
     kepsekNIP = 'NIP', 
@@ -20,20 +19,23 @@ export default function KartuMurid({ muridList, pengaturan, onClose }) {
     <>
       <style>{`
         @media print {
+          /* Baris ini yang memaksa warna tercetak! */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          
           body * { visibility: hidden; }
           #modal-overlay { position: absolute !important; top: 0 !important; left: 0 !important; background: white !important; overflow: visible !important; align-items: flex-start !important; }
           #modal-box { box-shadow: none !important; padding: 0 !important; max-height: none !important; overflow: visible !important; width: 100% !important; max-width: 100% !important; }
           #area-cetak, #area-cetak * { visibility: visible; }
           
-          /* Mengurangi gap agar lebih rapat saat di-print */
           #area-cetak { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; padding: 0 !important; background: white !important; display: flex !important; flex-direction: column !important; gap: 4px !important; align-items: center !important; }
           
           .no-print { display: none !important; }
           
-          /* Mengecilkan margin kertas dari 10mm menjadi 5mm agar muat 5 pasang kartu (10 kartu) */
+          /* Margin 5mm agar pas 5 pasang (10 kartu) dalam 1 kertas A4 */
           @page { size: A4 portrait; margin: 5mm; }
-          
-          /* Memperkecil margin bawah per pasangan kartu */
           .kartu-pasangan { page-break-inside: avoid !important; margin-bottom: 2px !important; }
         }
       `}</style>
@@ -49,7 +51,9 @@ export default function KartuMurid({ muridList, pengaturan, onClose }) {
               
               <div key={index} className="kartu-pasangan" style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
                 
-                {/* --- KARTU DEPAN --- */}
+                {/* =========================================================
+                    KARTU DEPAN
+                ========================================================== */}
                 <div style={{ width: '8.56cm', height: '5.4cm', border: '1px solid #9ca3af', borderRadius: '6px', overflow: 'hidden', position: 'relative', fontFamily: 'sans-serif', backgroundColor: 'white', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
                   <div style={{ backgroundColor: '#1e3a8a', color: 'white', padding: '4px 8px', borderBottom: '2px solid #fbbf24', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ width: '28px', height: '28px', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: 'white', borderRadius: '3px', padding: '1px' }}>
@@ -67,7 +71,7 @@ export default function KartuMurid({ muridList, pengaturan, onClose }) {
                     </div>
                   </div>
                   <div style={{ display: 'flex', padding: '6px 8px', flex: 1 }}>
-                    <div style={{ width: '1.8cm', height: '2.4cm', backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '10px', flexShrink: 0 }}>
+                    <div style={{ width: '1.8cm', height: '2.4cm', backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '4px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: '10px', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                       {murid.foto_url ? <img src={murid.foto_url} alt="Foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: '7px', color: '#9ca3af', textAlign: 'center' }}>PAS FOTO<br/>3x4</span>}
                     </div>
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -78,8 +82,8 @@ export default function KartuMurid({ muridList, pengaturan, onClose }) {
                         <div style={{ display: 'flex' }}><strong style={{ width: '40px' }}>Berlaku</strong>: {masaBerlaku}</div>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto' }}>
-                        <div style={{ padding: '2px', backgroundColor: 'white' }}>
-                          <QRCode value={murid.barcode_data || '000'} size={40} />
+                        <div style={{ padding: '2px', backgroundColor: 'white', borderRadius: '3px', border: '1px solid #e5e7eb' }}>
+                          <QRCode value={murid.barcode_data || '000'} size={38} />
                         </div>
                         <div style={{ textAlign: 'center', lineHeight: '1.1', width: '95px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                           <div style={{ fontSize: '6px', color: '#374151' }}>Kepala Sekolah,</div>
@@ -94,24 +98,40 @@ export default function KartuMurid({ muridList, pengaturan, onClose }) {
                   </div>
                 </div>
 
-                {/* --- KARTU BELAKANG --- */}
-                <div style={{ width: '8.56cm', height: '5.4cm', border: '1px solid #9ca3af', borderRadius: '6px', padding: '8px', position: 'relative', fontFamily: 'sans-serif', backgroundColor: 'white', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
-                  <h4 style={{ textAlign: 'center', margin: '0 0 6px 0', fontSize: '10px', textDecoration: 'underline', color: '#1e3a8a' }}>TATA TERTIB PERPUSTAKAAN</h4>
-                  <div style={{ flex: 1 }}>
-                    <ol style={{ fontSize: '7.5px', paddingLeft: '12px', margin: 0, lineHeight: '1.4', textAlign: 'justify', color: '#374151' }}>
-                      <li>Kartu ini wajib dibawa saat berkunjung dan meminjam buku.</li>
-                      <li>Peminjaman buku maksimal 3 judul selama 1 minggu.</li>
+                {/* =========================================================
+                    KARTU BELAKANG (DESAIN BARU)
+                ========================================================== */}
+                <div style={{ width: '8.56cm', height: '5.4cm', border: '1px solid #9ca3af', borderRadius: '6px', padding: '6px 8px', position: 'relative', fontFamily: 'sans-serif', background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 60%, #dbeafe 100%)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  
+                  {/* Watermark Buku & Efek Cahaya */}
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontSize: '110px', opacity: 0.04, zIndex: 0, pointerEvents: 'none' }}>📖</div>
+                  <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '80px', height: '80px', background: 'radial-gradient(circle, #bfdbfe 0%, transparent 70%)', opacity: 0.6, zIndex: 0 }}></div>
+                  <div style={{ position: 'absolute', bottom: '-20px', left: '-20px', width: '80px', height: '80px', background: 'radial-gradient(circle, #bfdbfe 0%, transparent 70%)', opacity: 0.6, zIndex: 0 }}></div>
+
+                  {/* Header Tata Tertib yang menyesuaikan kartu depan */}
+                  <div style={{ backgroundColor: '#1e3a8a', color: 'white', padding: '3px 5px', borderRadius: '4px', textAlign: 'center', marginBottom: '6px', position: 'relative', zIndex: 1, borderBottom: '1.5px solid #fbbf24', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ fontSize: '9px' }}>📚</span>
+                    <h4 style={{ margin: 0, fontSize: '9px', letterSpacing: '0.5px', fontWeight: 'bold' }}>TATA TERTIB PERPUSTAKAAN</h4>
+                  </div>
+                  
+                  {/* List Tata Tertib */}
+                  <div style={{ flex: 1, position: 'relative', zIndex: 1 }}>
+                    <ol style={{ fontSize: '7.5px', paddingLeft: '14px', margin: 0, lineHeight: '1.45', textAlign: 'justify', color: '#0f172a' }}>
+                      <li><strong style={{ color: '#1e3a8a' }}>Wajib dibawa</strong> saat berkunjung dan meminjam buku.</li>
+                      <li>Peminjaman buku maksimal <strong style={{ color: '#1e3a8a' }}>3 judul</strong> selama 1 minggu.</li>
                       <li>Keterlambatan pengembalian dikenakan sanksi/denda.</li>
-                      <li>Buku yang hilang/rusak wajib diganti dengan judul yang sama.</li>
+                      <li>Buku yang hilang/rusak <strong style={{ color: '#ef4444' }}>wajib diganti</strong> dengan judul yang sama.</li>
                       <li>Kartu ini tidak boleh dipindahtangankan kepada siapapun.</li>
                     </ol>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto' }}>
-                    <div style={{ padding: '2px', backgroundColor: 'white' }}>
-                      <QRCode value={murid.barcode_data || '000'} size={40} />
+
+                  {/* Bagian Bawah: QR Code & Tanda Tangan */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 'auto', position: 'relative', zIndex: 1 }}>
+                    <div style={{ padding: '2px', backgroundColor: 'white', borderRadius: '3px', border: '1px solid #e5e7eb' }}>
+                      <QRCode value={murid.barcode_data || '000'} size={38} />
                     </div>
                     <div style={{ textAlign: 'center', lineHeight: '1.1', width: '95px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <div style={{ fontSize: '6px', color: '#374151' }}>Kepala Perpustakaan,</div>
+                      <div style={{ fontSize: '6px', color: '#1e3a8a', fontWeight: 'bold' }}>Kepala Perpustakaan,</div>
                       <div style={{ height: '30px', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '2px 0' }}>
                         {ttdPerpus ? <img src={ttdPerpus} alt="TTD" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} /> : <div style={{ height: '22px' }}></div>}
                       </div>
@@ -119,6 +139,7 @@ export default function KartuMurid({ muridList, pengaturan, onClose }) {
                       <div style={{ fontSize: '5.5px', color: '#374151' }}>NIP. {perpusNIP}</div>
                     </div>
                   </div>
+
                 </div>
 
               </div>
