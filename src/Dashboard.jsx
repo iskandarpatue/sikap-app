@@ -5,6 +5,7 @@ import RekapKehadiran from './RekapKehadiran'
 import ScanPerpustakaan from './ScanPerpustakaan'
 import KelolaAkun from './KelolaAkun'
 import RekapPerpustakaan from './RekapPerpustakaan'
+import DashboardPerpus from './DashboardPerpus' // Import komponen baru
 
 export default function Dashboard({ user, onLogout }) {
   
@@ -73,27 +74,54 @@ export default function Dashboard({ user, onLogout }) {
   // 3. DASHBOARD KHUSUS PETUGAS PERPUSTAKAAN
   // ==========================================
   if (user.role === 'perpus') {
-    const [tabPerpus, setTabPerpus] = useState('scan')
+    // Default tab diubah ke 'dashboard' agar tampilan pertama adalah ringkasan
+    const [tabPerpus, setTabPerpus] = useState('dashboard') 
     
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc' }}>
         {/* HEADER PERPUS (Warna Hijau) */}
         <div style={{ backgroundColor: '#059669', padding: '15px 30px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '20px' }}>📚 Dashboard Perpustakaan</h2>
+            <h2 style={{ margin: 0, fontSize: '20px' }}>📚 Sistem Informasi Perpustakaan</h2>
             <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#a7f3d0' }}>Selamat Bertugas, <strong>{user.nama_lengkap}</strong></p>
           </div>
           <button onClick={onLogout} style={{ padding: '10px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🚪 LOGOUT</button>
         </div>
         
-        {/* KONTEN UTAMA PERPUS (Bentuk 2 Tab) */}
-        <div style={{ padding: '30px', maxWidth: '1200px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: 'white', padding: '10px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-            <button onClick={() => setTabPerpus('scan')} style={{ flex: 1, padding: '12px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'scan' ? '#10b981' : 'transparent', color: tabPerpus === 'scan' ? 'white' : '#475569' }}>📷 Panel Scanner Kunjungan</button>
-            <button onClick={() => setTabPerpus('rekap')} style={{ flex: 1, padding: '12px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'rekap' ? '#10b981' : 'transparent', color: tabPerpus === 'rekap' ? 'white' : '#475569' }}>📉 Rekap & Laporan (Segera Hadir)</button>
+        {/* KONTEN UTAMA PERPUS (Bentuk 3 Tab) */}
+        <div style={{ padding: '20px 30px', maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: 'white', padding: '10px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', flexWrap: 'wrap' }}>
+            
+            {/* Tombol Tab Baru: Dashboard Utama */}
+            <button 
+              onClick={() => setTabPerpus('dashboard')} 
+              style={{ flex: 1, minWidth: '150px', padding: '12px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'dashboard' ? '#10b981' : 'transparent', color: tabPerpus === 'dashboard' ? 'white' : '#475569' }}
+            >
+              🏠 Dashboard Utama
+            </button>
+            
+            {/* Tombol Tab: Scanner Kunjungan/Sirkulasi */}
+            <button 
+              onClick={() => setTabPerpus('scan')} 
+              style={{ flex: 1, minWidth: '150px', padding: '12px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'scan' ? '#10b981' : 'transparent', color: tabPerpus === 'scan' ? 'white' : '#475569' }}
+            >
+              📷 Scanner Layanan
+            </button>
+            
+            {/* Tombol Tab: Rekap Laporan */}
+            <button 
+              onClick={() => setTabPerpus('rekap')} 
+              style={{ flex: 1, minWidth: '150px', padding: '12px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'rekap' ? '#10b981' : 'transparent', color: tabPerpus === 'rekap' ? 'white' : '#475569' }}
+            >
+              📉 Rekap Data
+            </button>
           </div>
           
-          {tabPerpus === 'scan' ? <ScanPerpustakaan /> : <RekapPerpustakaan />}
+          {/* Tampilan Berdasarkan Tab yang Dipilih */}
+          {tabPerpus === 'dashboard' && <DashboardPerpus />}
+          {tabPerpus === 'scan' && <ScanPerpustakaan />}
+          {tabPerpus === 'rekap' && <RekapPerpustakaan />}
+          
         </div>
       </div>
     )
