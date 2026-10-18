@@ -5,7 +5,9 @@ import RekapKehadiran from './RekapKehadiran'
 import ScanPerpustakaan from './ScanPerpustakaan'
 import KelolaAkun from './KelolaAkun'
 import RekapPerpustakaan from './RekapPerpustakaan'
-import DashboardPerpus from './DashboardPerpus' // Import komponen baru
+import DashboardPerpus from './DashboardPerpus'
+import MenuPerpustakaan from './MenuPerpustakaan' // Import menu profil
+import KatalogBuku from './KatalogBuku' // Import menu katalog buku
 
 export default function Dashboard({ user, onLogout }) {
   
@@ -48,7 +50,7 @@ export default function Dashboard({ user, onLogout }) {
     
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc' }}>
-        {/* HEADER GURU (Warna Biru) */}
+        {/* HEADER GURU */}
         <div style={{ backgroundColor: '#2563eb', padding: '15px 30px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '20px' }}>🏫 Dashboard Guru Piket (Kehadiran)</h2>
@@ -57,7 +59,7 @@ export default function Dashboard({ user, onLogout }) {
           <button onClick={onLogout} style={{ padding: '10px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🚪 LOGOUT</button>
         </div>
         
-        {/* KONTEN UTAMA GURU (Bentuk 2 Tab) */}
+        {/* KONTEN UTAMA GURU */}
         <div style={{ padding: '30px', maxWidth: '1200px', margin: '0 auto' }}>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: 'white', padding: '10px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
             <button onClick={() => setTabKehadiran('scan')} style={{ flex: 1, padding: '12px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabKehadiran === 'scan' ? '#3b82f6' : 'transparent', color: tabKehadiran === 'scan' ? 'white' : '#475569' }}>📷 Panel Scanner Kehadiran</button>
@@ -74,12 +76,11 @@ export default function Dashboard({ user, onLogout }) {
   // 3. DASHBOARD KHUSUS PETUGAS PERPUSTAKAAN
   // ==========================================
   if (user.role === 'perpus') {
-    // Default tab diubah ke 'dashboard' agar tampilan pertama adalah ringkasan
     const [tabPerpus, setTabPerpus] = useState('dashboard') 
     
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc' }}>
-        {/* HEADER PERPUS (Warna Hijau) */}
+        {/* HEADER PERPUS */}
         <div style={{ backgroundColor: '#059669', padding: '15px 30px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '20px' }}>📚 Sistem Informasi Perpustakaan</h2>
@@ -88,37 +89,47 @@ export default function Dashboard({ user, onLogout }) {
           <button onClick={onLogout} style={{ padding: '10px 20px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🚪 LOGOUT</button>
         </div>
         
-        {/* KONTEN UTAMA PERPUS (Bentuk 3 Tab) */}
+        {/* KONTEN UTAMA PERPUS */}
         <div style={{ padding: '20px 30px', maxWidth: '1200px', margin: '0 auto' }}>
+          
+          {/* MENU TAB NAVIGASI PERPUS */}
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: 'white', padding: '10px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', flexWrap: 'wrap' }}>
-            
-            {/* Tombol Tab Baru: Dashboard Utama */}
             <button 
               onClick={() => setTabPerpus('dashboard')} 
-              style={{ flex: 1, minWidth: '150px', padding: '12px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'dashboard' ? '#10b981' : 'transparent', color: tabPerpus === 'dashboard' ? 'white' : '#475569' }}
+              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'dashboard' ? '#10b981' : 'transparent', color: tabPerpus === 'dashboard' ? 'white' : '#475569', fontSize: '14px' }}
             >
-              🏠 Dashboard Utama
+              🏠 Dashboard
             </button>
-            
-            {/* Tombol Tab: Scanner Kunjungan/Sirkulasi */}
+            <button 
+              onClick={() => setTabPerpus('profil')} 
+              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'profil' ? '#10b981' : 'transparent', color: tabPerpus === 'profil' ? 'white' : '#475569', fontSize: '14px' }}
+            >
+              🏢 Profil
+            </button>
+            <button 
+              onClick={() => setTabPerpus('katalog')} 
+              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'katalog' ? '#10b981' : 'transparent', color: tabPerpus === 'katalog' ? 'white' : '#475569', fontSize: '14px' }}
+            >
+              📚 Katalog Buku
+            </button>
             <button 
               onClick={() => setTabPerpus('scan')} 
-              style={{ flex: 1, minWidth: '150px', padding: '12px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'scan' ? '#10b981' : 'transparent', color: tabPerpus === 'scan' ? 'white' : '#475569' }}
+              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'scan' ? '#10b981' : 'transparent', color: tabPerpus === 'scan' ? 'white' : '#475569', fontSize: '14px' }}
             >
-              📷 Scanner Layanan
+              📷 Sirkulasi
             </button>
-            
-            {/* Tombol Tab: Rekap Laporan */}
             <button 
               onClick={() => setTabPerpus('rekap')} 
-              style={{ flex: 1, minWidth: '150px', padding: '12px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'rekap' ? '#10b981' : 'transparent', color: tabPerpus === 'rekap' ? 'white' : '#475569' }}
+              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'rekap' ? '#10b981' : 'transparent', color: tabPerpus === 'rekap' ? 'white' : '#475569', fontSize: '14px' }}
             >
               📉 Rekap Data
             </button>
           </div>
           
-          {/* Tampilan Berdasarkan Tab yang Dipilih */}
+          {/* AREA TAMPILAN KONTEN BERDASARKAN TAB */}
           {tabPerpus === 'dashboard' && <DashboardPerpus />}
+          {tabPerpus === 'profil' && <MenuPerpustakaan />}
+          {tabPerpus === 'katalog' && <KatalogBuku />}
           {tabPerpus === 'scan' && <ScanPerpustakaan />}
           {tabPerpus === 'rekap' && <RekapPerpustakaan />}
           
@@ -127,6 +138,5 @@ export default function Dashboard({ user, onLogout }) {
     )
   }
 
-  // Jika Role Error/Tidak Dikenal
   return null
 }
