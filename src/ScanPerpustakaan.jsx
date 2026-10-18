@@ -1,271 +1,263 @@
 import { useState, useEffect, useRef } from 'react'
-import { Html5QrcodeScanner } from 'html5-qrcode'
 import { supabase } from './supabase'
 
 export default function ScanPerpustakaan() {
-  const [mode, setMode] = useState('Membaca') 
-  const [pesan, setPesan] = useState('Pilih mode kunjungan, lalu scan kartu.')
-  const [warnaPesan, setWarnaPesan] = useState('#64748b')
-  const [ikonPesan, setIkonPesan] = useState('📖')
-  const [loading, setLoading] = useState(false)
-  const [muridTerakhir, setMuridTerakhir] = useState(null)
+  const [mode, setMode] = useState('kunjungan') // kunjungan, pinjam, kembali
+  const [nisn, setNisn] = useState('')
+  const [isbn, setIsbn] = useState('')
   
-  const [logHariIni, setLogHariIni] = useState([])
-  const [filterKelas, setFilterKelas] = useState('Semua Kelas')
+  const [loading, setLoading] = useState(false)
+  const [pesan, setPesan] = useState(null) // { type: 'success' | 'error', text: '' }
+  const [riwayatHariIni, setRiwayatHariIni] = useState([])
 
-  const modeRef = useRef(mode)
-  const loadingRef = useRef(loading)
-  const scannerSudahAktif = useRef(false)
-  const prosesScanRef = useRef()
+  const inputNisnRef = useRef(null)
+  const inputIsbnRef = useRef(null)
 
-  useEffect(() => { modeRef.current = mode }, [mode])
-  useEffect(() => { loadingRef.current = loading }, [loading])
+  useEffect(() => {
+    ambilRiwayatHariIni()
+    // Auto focus ke input saat mode berganti
+    if (mode === 'kunjungan' || mode === 'pinjam') {
+      setTimeout(() => inputNisnRef.current?.focus(), 100)
+    } else {
+      setTimeout(() => inputIsbnRef.current?.focus(), 100)
+    }
+  }, [mode])
 
-  const ambilLogHariIni = async () => {
-    const now = new Date()
-    const tanggalHariIni = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-
-    const { data } = await supabase.from('kunjungan_perpus').select('*').eq('tanggal', tanggalHariIni).order('id', { ascending: false })
-    if (data) setLogHariIni(data)
+  // --- AMBIL RIWAYAT HARI INI ---
+  const ambilRiwayatHariIni = async () => {
+    const hariIni = new Date().toLocaleDateString('id-ID')
+    const { data } = await supabase
+      .from('sirkulasi_perpus')
+      .select('*')
+      .order('id', { ascending: false })
+      .limit(10) // Ambil 10 aktivitas terakhir
+    
+    if (data) setRiwayatHariIni(data)
   }
 
-  useEffect(() => { ambilLogHariIni() }, [])
+  // --- HELPER: CARI MURID & BUKU ---
+  const cariMurid = async (nisn_cari) => {
+    const { data } = await supabase.from('students').select('*').eq('nisn', nisn_cari).single()
+    return data
+  }
 
-  const prosesScan = async (nisn_scan, tujuanSaatIni) => {
-    if (loadingRef.current) return
+  const cariBuku = async (isbn_cari) => {
+    const { data } = await supabase.from('buku').select('*').eq('isbn', isbn_cari).single()
+    return data
+  }
+
+  // --- PROSES SUBMIT SCANNER ---
+  const prosesScan = async (e) => {
+    e.preventDefault()
     setLoading(true)
-    setPesan('Mencatat data kunjungan...')
-    setWarnaPesan('#059669')
-    setIkonPesan('🔄')
+    setPesan(null)
+    const tglSekarang = new Date().toLocaleString('id-ID')
 
     try {
-      const { data: murid, error: errMurid } = await supabase.from('students').select('*').eq('barcode_data', nisn_scan).single()
-      
-      if (errMurid || !murid) {
-        setPesan('Data murid tidak ditemukan!')
-        setWarnaPesan('#ef4444')
-        setIkonPesan('❌')
-        setLoading(false)
-        return
+      // 1. MODE KUNJUNGAN
+      if (mode === 'kunjungan') {
+        const murid = await cariMurid(nisn)
+        if (!murid) throw new Error('Data murid tidak ditemukan!')
+
+        const { error } = await supabase.from('sirkulasi_perpus').insert([{
+          nisn_murid: murid.nisn,
+          nama_murid: murid.nama,
+          jenis_layanan: 'Kunjungan',
+          status: 'Hadir',
+          tgl_pinjam: tglSekarang
+        }])
+        if (error) throw error
+        
+        setPesan({ type: 'success', text: `Selamat datang di perpustakaan, ${murid.nama}!` })
+        setNisn('')
+        inputNisnRef.current?.focus()
       }
 
-      setMuridTerakhir(murid)
-      const now = new Date()
-      const tanggalHariIni = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-      
-      const { error: errInsert } = await supabase.from('kunjungan_perpus').insert([{
-        nisn: murid.nisn, nama: murid.nama, kelas: murid.kelas,
-        tanggal: tanggalHariIni, waktu_kunjung: now.toISOString(), tujuan: tujuanSaatIni 
-      }])
-      
-      if (errInsert) throw errInsert
-      
-      setPesan(`BERHASIL: ${murid.nama} (${tujuanSaatIni})`)
-      setWarnaPesan('#10b981')
-      setIkonPesan('✅')
-      ambilLogHariIni() 
+      // 2. MODE PEMINJAMAN
+      else if (mode === 'pinjam') {
+        const murid = await cariMurid(nisn)
+        if (!murid) throw new Error('Data murid tidak ditemukan!')
+        
+        const buku = await cariBuku(isbn)
+        if (!buku) throw new Error('Data buku tidak ditemukan di katalog!')
+        if (buku.stok <= 0) throw new Error('Maaf, stok buku habis/sedang dipinjam semua.')
 
-    } catch (error) {
-      let pesanAsli = 'Error Server';
-      if (error && error.message) pesanAsli = error.message;
-      setPesan(`Error: ${pesanAsli}`)
-      setWarnaPesan('#ef4444')
-      setIkonPesan('❌')
+        // Catat di sirkulasi
+        const { error: errSirkulasi } = await supabase.from('sirkulasi_perpus').insert([{
+          nisn_murid: murid.nisn,
+          nama_murid: murid.nama,
+          isbn_buku: buku.isbn,
+          judul_buku: buku.judul,
+          jenis_layanan: 'Peminjaman',
+          status: 'Dipinjam',
+          tgl_pinjam: tglSekarang
+        }])
+        if (errSirkulasi) throw errSirkulasi
+
+        // Kurangi stok buku
+        await supabase.from('buku').update({ stok: buku.stok - 1 }).eq('isbn', buku.isbn)
+
+        setPesan({ type: 'success', text: `Sukses! "${buku.judul}" berhasil dipinjam oleh ${murid.nama}.` })
+        setNisn('')
+        setIsbn('')
+        inputNisnRef.current?.focus()
+      }
+
+      // 3. MODE PENGEMBALIAN
+      else if (mode === 'kembali') {
+        const buku = await cariBuku(isbn)
+        if (!buku) throw new Error('Data buku tidak dikenali sistem!')
+
+        // Cari data pinjaman yang masih aktif (belum dikembalikan)
+        const { data: dataPinjam } = await supabase
+          .from('sirkulasi_perpus')
+          .select('*')
+          .eq('isbn_buku', isbn)
+          .eq('status', 'Dipinjam')
+          .order('id', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (!dataPinjam) throw new Error('Buku ini tidak sedang dipinjam oleh siapapun.')
+
+        // Update status di sirkulasi
+        const { error: errUpdate } = await supabase.from('sirkulasi_perpus').update({
+          status: 'Dikembalikan',
+          tgl_kembali: tglSekarang
+        }).eq('id', dataPinjam.id)
+        if (errUpdate) throw errUpdate
+
+        // Tambah kembali stok buku
+        await supabase.from('buku').update({ stok: buku.stok + 1 }).eq('isbn', buku.isbn)
+
+        setPesan({ type: 'success', text: `Buku "${buku.judul}" berhasil dikembalikan oleh ${dataPinjam.nama_murid}. Stok telah diupdate.` })
+        setIsbn('')
+        inputIsbnRef.current?.focus()
+      }
+
+    } catch (err) {
+      setPesan({ type: 'error', text: err.message })
     }
+    
     setLoading(false)
+    ambilRiwayatHariIni()
   }
 
-  useEffect(() => { prosesScanRef.current = prosesScan }, [prosesScan])
-
-  // ==========================================
-  // FITUR PENDETEKSI SCANNER FISIK (USB/BLUETOOTH)
-  // ==========================================
-  useEffect(() => {
-    let barcodeBuffer = ''
-    let lastKeyTime = Date.now()
-
-    const handleKeyDown = (e) => {
-      const currentTime = Date.now()
-      if (currentTime - lastKeyTime > 100) { barcodeBuffer = '' }
-      lastKeyTime = currentTime
-
-      if (e.key === 'Enter') {
-        if (barcodeBuffer.length > 0) {
-          e.preventDefault()
-          prosesScanRef.current(barcodeBuffer, modeRef.current)
-          barcodeBuffer = ''
-        }
-      } else if (e.key.length === 1) { 
-        barcodeBuffer += e.key
-      }
+  // --- FUNGSI PINDAH FOKUS INPUT ---
+  const handleNisnEnter = (e) => {
+    // Jika di mode pinjam, saat tekan enter di NISN, pindah fokus ke ISBN
+    if (e.key === 'Enter' && mode === 'pinjam' && nisn.trim() !== '') {
+      e.preventDefault()
+      inputIsbnRef.current?.focus()
     }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
-
-  // ==========================================
-  // KAMERA LAPTOP / HP (CADANGAN)
-  // ==========================================
-  useEffect(() => {
-    if (scannerSudahAktif.current) return
-    scannerSudahAktif.current = true
-
-    const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false)
-
-    scanner.render(async (decodedText) => {
-      scanner.pause(true)
-      await prosesScanRef.current(decodedText, modeRef.current)
-      setTimeout(() => { try { scanner.resume() } catch(e) {} }, 3000)
-    }, () => {})
-
-    return () => {
-      scannerSudahAktif.current = false
-      scanner.clear().catch(e => console.log(e))
-    }
-  }, []) 
-
-  const hapusLog = async (id, namaMurid, tujuan) => {
-    if(!window.confirm(`Hapus data ${tujuan} milik ${namaMurid}?`)) return
-    await supabase.from('kunjungan_perpus').delete().eq('id', id)
-    ambilLogHariIni() 
   }
-
-  const formatJam = (isoString) => {
-    if (!isoString) return '-'
-    const date = new Date(isoString)
-    return isNaN(date.getTime()) ? isoString : date.toLocaleTimeString('id-ID', { hour12: false, hour: '2-digit', minute: '2-digit' })
-  }
-
-  const ringkasanKelas = logHariIni.reduce((acc, curr) => { acc[curr.kelas] = (acc[curr.kelas] || 0) + 1; return acc }, {})
-  const daftarKelasUnik = Object.keys(ringkasanKelas).sort()
-  const logTampil = filterKelas === 'Semua Kelas' ? logHariIni : logHariIni.filter(row => row.kelas === filterKelas)
 
   return (
-    <div style={{ paddingBottom: '40px' }}>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       
-      {/* HEADER HERO SECTION */}
-      <div style={{ background: 'linear-gradient(135deg, #064e3b 0%, #059669 100%)', padding: '25px', borderRadius: '16px', color: 'white', display: 'flex', alignItems: 'center', gap: '20px', boxShadow: '0 10px 25px rgba(5, 150, 105, 0.4)', marginBottom: '25px', position: 'relative' }}>
-        <div style={{ position: 'absolute', top: '15px', right: '20px', backgroundColor: '#10b981', color: 'white', padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-          📟 Alat Scanner Fisik: READY
-        </div>
-        <div style={{ fontSize: '50px', backgroundColor: 'rgba(255,255,255,0.2)', width: '80px', height: '80px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '50%' }}>📚</div>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '26px', letterSpacing: '0.5px' }}>Layanan Perpustakaan Digital</h2>
-          <p style={{ margin: '5px 0 0 0', color: '#a7f3d0', fontSize: '15px' }}>Pilih mode, lalu tembak kartu menggunakan scanner fisik.</p>
-        </div>
-      </div>
-
-      {/* PANEL TOMBOL TUJUAN KUNJUNGAN */}
+      {/* KOTAK NAVIGASI MODE */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', flexWrap: 'wrap' }}>
-        {[ 
-          { id: 'Membaca', ikon: '📖', warna: '#3b82f6', bayangan: 'rgba(59,130,246,0.3)', teks: 'Membaca' },
-          { id: 'Pinjam Buku', ikon: '📤', warna: '#f59e0b', bayangan: 'rgba(245,158,11,0.3)', teks: 'Pinjam Buku' },
-          { id: 'Kembalikan Buku', ikon: '📥', warna: '#10b981', bayangan: 'rgba(16,185,129,0.3)', teks: 'Kembalikan Buku' }
-        ].map((btn) => (
-          <button 
-            key={btn.id}
-            onClick={() => { setMode(btn.id); setPesan(`Mode Aktif: ${btn.teks}`); setMuridTerakhir(null); setWarnaPesan(btn.warna); setIkonPesan(btn.ikon); }}
-            style={{ 
-              flex: 1, padding: '15px', fontSize: '16px', fontWeight: 'bold', borderRadius: '12px', border: 'none', cursor: 'pointer', transition: 'all 0.2s', 
-              backgroundColor: mode === btn.id ? btn.warna : 'white', 
-              color: mode === btn.id ? 'white' : '#475569', 
-              boxShadow: mode === btn.id ? `0 8px 20px ${btn.bayangan}` : '0 4px 10px rgba(0,0,0,0.05)',
-              border: mode === btn.id ? 'none' : '1px solid #e2e8f0',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px'
-            }}
-          >
-            <span style={{ fontSize: '22px' }}>{btn.ikon}</span> {btn.teks.toUpperCase()}
-          </button>
-        ))}
+        <button onClick={() => { setMode('kunjungan'); setPesan(null) }} style={{ flex: 1, padding: '20px', borderRadius: '10px', border: mode === 'kunjungan' ? '3px solid #3b82f6' : '1px solid #d1d5db', backgroundColor: mode === 'kunjungan' ? '#eff6ff' : 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', transition: '0.2s' }}>
+          <span style={{ fontSize: '30px' }}>👋</span>
+          <span style={{ fontWeight: 'bold', fontSize: '16px', color: mode === 'kunjungan' ? '#1d4ed8' : '#4b5563' }}>Mode Kunjungan</span>
+        </button>
+        
+        <button onClick={() => { setMode('pinjam'); setPesan(null) }} style={{ flex: 1, padding: '20px', borderRadius: '10px', border: mode === 'pinjam' ? '3px solid #f59e0b' : '1px solid #d1d5db', backgroundColor: mode === 'pinjam' ? '#fffbeb' : 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', transition: '0.2s' }}>
+          <span style={{ fontSize: '30px' }}>📖</span>
+          <span style={{ fontWeight: 'bold', fontSize: '16px', color: mode === 'pinjam' ? '#b45309' : '#4b5563' }}>Mode Peminjaman</span>
+        </button>
+        
+        <button onClick={() => { setMode('kembali'); setPesan(null) }} style={{ flex: 1, padding: '20px', borderRadius: '10px', border: mode === 'kembali' ? '3px solid #10b981' : '1px solid #d1d5db', backgroundColor: mode === 'kembali' ? '#ecfdf5' : 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', transition: '0.2s' }}>
+          <span style={{ fontSize: '30px' }}>🔄</span>
+          <span style={{ fontWeight: 'bold', fontSize: '16px', color: mode === 'kembali' ? '#047857' : '#4b5563' }}>Mode Pengembalian</span>
+        </button>
       </div>
 
-      <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap' }}>
-        {/* PANEL KAMERA */}
-        <div style={{ flex: 1, minWidth: '320px', backgroundColor: 'white', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-            <span style={{ fontSize: '20px' }}>📷</span>
-            <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>Kamera Scanner (Cadangan)</h3>
-          </div>
-          <div style={{ borderRadius: '12px', overflow: 'hidden', border: `3px dashed ${mode === 'Membaca' ? '#bfdbfe' : mode === 'Pinjam Buku' ? '#fde68a' : '#bbf7d0'}` }}>
-            <div id="reader" style={{ width: '100%', border: 'none' }}></div>
+      <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
+        {/* PANEL SCANNER */}
+        <div style={{ flex: 1.5, minWidth: '350px' }}>
+          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e5e7eb' }}>
+            <h2 style={{ margin: '0 0 20px 0', color: '#1f2937', textAlign: 'center' }}>
+              {mode === 'kunjungan' && 'Arahkan Scanner ke Kartu Murid'}
+              {mode === 'pinjam' && 'Scan Kartu Murid, Lalu Scan Buku'}
+              {mode === 'kembali' && 'Arahkan Scanner ke Barcode Buku'}
+            </h2>
+
+            <form onSubmit={prosesScan} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {(mode === 'kunjungan' || mode === 'pinjam') && (
+                <div>
+                  <label style={{ fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '8px' }}>Scan NISN Murid</label>
+                  <input 
+                    ref={inputNisnRef}
+                    type="text" 
+                    value={nisn} 
+                    onChange={(e) => setNisn(e.target.value)}
+                    onKeyDown={handleNisnEnter}
+                    placeholder="Contoh: 0111121747..." 
+                    style={{ width: '100%', padding: '15px', fontSize: '20px', borderRadius: '8px', border: '2px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#f8fafc', outlineColor: '#3b82f6' }} 
+                    required 
+                  />
+                </div>
+              )}
+
+              {(mode === 'pinjam' || mode === 'kembali') && (
+                <div>
+                  <label style={{ fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '8px' }}>Scan ISBN / Kode Buku</label>
+                  <input 
+                    ref={inputIsbnRef}
+                    type="text" 
+                    value={isbn} 
+                    onChange={(e) => setIsbn(e.target.value)}
+                    placeholder="Contoh: 9786022828..." 
+                    style={{ width: '100%', padding: '15px', fontSize: '20px', borderRadius: '8px', border: '2px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#f8fafc', outlineColor: '#f59e0b' }} 
+                    required 
+                  />
+                </div>
+              )}
+
+              {/* Tombol Tersembunyi (Trigger dari Scanner Enter) */}
+              <button type="submit" disabled={loading} style={{ padding: '15px', backgroundColor: '#1f2937', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', marginTop: '10px' }}>
+                {loading ? 'Memproses Data...' : 'PROSES (Atau Tekan Enter)'}
+              </button>
+
+            </form>
+
+            {/* AREA PESAN FEEDBACK */}
+            {pesan && (
+              <div style={{ marginTop: '25px', padding: '15px', borderRadius: '8px', backgroundColor: pesan.type === 'success' ? '#dcfce7' : '#fee2e2', color: pesan.type === 'success' ? '#166534' : '#991b1b', border: `1px solid ${pesan.type === 'success' ? '#86efac' : '#fca5a5'}` }}>
+                <p style={{ margin: 0, fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {pesan.type === 'success' ? '✅' : '❌'} {pesan.text}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* PANEL HASIL SCAN */}
-        <div style={{ flex: 1, minWidth: '320px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', textAlign: 'center', borderTop: `6px solid ${warnaPesan}` }}>
-            <div style={{ fontSize: '40px', marginBottom: '10px' }}>{ikonPesan}</div>
-            <h3 style={{ margin: '0 0 10px 0', color: warnaPesan, fontSize: '20px' }}>Status Pengecekan</h3>
-            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '16px', color: '#334155' }}>{pesan}</p>
-          </div>
-
-          {muridTerakhir && (
-            <div style={{ background: 'linear-gradient(to right, #ffffff, #f8fafc)', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '20px', border: '1px solid #e2e8f0' }}>
-              <div style={{ width: '90px', height: '115px', backgroundColor: '#e2e8f0', borderRadius: '10px', overflow: 'hidden', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-                {muridTerakhir.foto_url ? <img src={muridTerakhir.foto_url} alt="Foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px' }}>👤</div>}
-              </div>
-              <div>
-                <span style={{ backgroundColor: '#d1fae5', color: '#047857', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', display: 'inline-block', marginBottom: '8px' }}>🎓 {muridTerakhir.kelas}</span>
-                <h4 style={{ margin: '0 0 5px 0', color: '#0f172a', fontSize: '22px' }}>{muridTerakhir.nama}</h4>
-                <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>NISN: <strong>{muridTerakhir.nisn}</strong></p>
-              </div>
+        {/* PANEL RIWAYAT AKTIVITAS TERAKHIR */}
+        <div style={{ flex: 1, minWidth: '300px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e5e7eb', height: 'fit-content' }}>
+          <h3 style={{ margin: '0 0 15px 0', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '8px' }}>🕒 Aktivitas Terakhir Hari Ini</h3>
+          
+          {riwayatHariIni.length === 0 ? (
+            <p style={{ color: '#9ca3af', textAlign: 'center', margin: '30px 0' }}>Belum ada aktivitas sirkulasi.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {riwayatHariIni.map((riwayat) => (
+                <div key={riwayat.id} style={{ padding: '12px', border: '1px solid #f1f5f9', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#1e293b' }}>{riwayat.nama_murid}</span>
+                    <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '10px', backgroundColor: riwayat.jenis_layanan === 'Kunjungan' ? '#e0f2fe' : riwayat.status === 'Dipinjam' ? '#fef3c7' : '#dcfce7', color: riwayat.jenis_layanan === 'Kunjungan' ? '#0369a1' : riwayat.status === 'Dipinjam' ? '#92400e' : '#166534', fontWeight: 'bold' }}>
+                      {riwayat.jenis_layanan === 'Kunjungan' ? 'Tamu' : riwayat.status}
+                    </span>
+                  </div>
+                  {riwayat.judul_buku && (
+                    <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#475569' }}>📖 {riwayat.judul_buku}</p>
+                  )}
+                  <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>{riwayat.tgl_kembali ? riwayat.tgl_kembali : riwayat.tgl_pinjam}</p>
+                </div>
+              ))}
             </div>
           )}
-        </div>
-      </div>
-
-      {/* TABEL LOG KUNJUNGAN LIVE */}
-      <div style={{ marginTop: '30px', backgroundColor: 'white', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>📋</span>
-            <h3 style={{ margin: 0, color: '#1e293b', fontSize: '18px' }}>Log Kunjungan <span style={{ color: '#059669', fontWeight: 'bold' }}>({logHariIni.length} Orang)</span></h3>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f8fafc', padding: '8px 15px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-            <span style={{ fontSize: '14px' }}>🎯 Filter:</span>
-            <select value={filterKelas} onChange={(e) => setFilterKelas(e.target.value)} style={{ padding: '6px', border: 'none', backgroundColor: 'transparent', fontSize: '14px', fontWeight: 'bold', color: '#1e293b', outline: 'none', cursor: 'pointer' }}>
-              <option value="Semua Kelas">Semua Kelas</option>
-              {daftarKelasUnik.map(kls => <option key={kls} value={kls}>{kls}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                <th style={{ padding: '15px', color: '#475569' }}>No</th>
-                <th style={{ padding: '15px', color: '#475569' }}>Nama Pengunjung</th>
-                <th style={{ padding: '15px', color: '#475569' }}>Kelas</th>
-                <th style={{ padding: '15px', color: '#475569', textAlign: 'center' }}>Waktu</th>
-                <th style={{ padding: '15px', color: '#475569', textAlign: 'center' }}>Tujuan</th>
-                <th style={{ padding: '15px', color: '#475569', textAlign: 'center' }}>Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logTampil.length === 0 ? (
-                <tr><td colSpan="6" style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>Belum ada aktivitas perpustakaan...</td></tr>
-              ) : (
-                logTampil.map((row, index) => (
-                  <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9', transition: '0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                    <td style={{ padding: '15px', color: '#64748b' }}>{index + 1}</td>
-                    <td style={{ padding: '15px', fontWeight: 'bold', color: '#0f172a' }}>{row.nama}</td>
-                    <td style={{ padding: '15px', color: '#475569' }}>{row.kelas}</td>
-                    <td style={{ padding: '15px', textAlign: 'center', fontWeight: 'bold', color: '#475569' }}>{formatJam(row.waktu_kunjung)}</td>
-                    <td style={{ padding: '15px', textAlign: 'center' }}>
-                      <span style={{ backgroundColor: row.tujuan === 'Membaca' ? '#eff6ff' : row.tujuan === 'Pinjam Buku' ? '#fef3c7' : '#dcfce7', color: row.tujuan === 'Membaca' ? '#2563eb' : row.tujuan === 'Pinjam Buku' ? '#d97706' : '#166534', padding: '6px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                        {row.tujuan === 'Membaca' ? '📖' : row.tujuan === 'Pinjam Buku' ? '📤' : '📥'} {row.tujuan}
-                      </span>
-                    </td>
-                    <td style={{ padding: '15px', textAlign: 'center' }}>
-                      <button onClick={() => hapusLog(row.id, row.nama, row.tujuan)} style={{ padding: '8px', backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }} title="Hapus Data">🗑️</button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
     </div>
