@@ -6,8 +6,9 @@ import ScanPerpustakaan from './ScanPerpustakaan'
 import KelolaAkun from './KelolaAkun'
 import RekapPerpustakaan from './RekapPerpustakaan'
 import DashboardPerpus from './DashboardPerpus'
-import MenuPerpustakaan from './MenuPerpustakaan' // Import menu profil
-import KatalogBuku from './KatalogBuku' // Import menu katalog buku
+import MenuPerpustakaan from './MenuPerpustakaan'
+import KatalogBuku from './KatalogBuku'
+import IdBuku from './IdBuku' // Import panel Kelola Eksemplar baru
 
 export default function Dashboard({ user, onLogout }) {
   
@@ -92,35 +93,44 @@ export default function Dashboard({ user, onLogout }) {
         {/* KONTEN UTAMA PERPUS */}
         <div style={{ padding: '20px 30px', maxWidth: '1200px', margin: '0 auto' }}>
           
-          {/* MENU TAB NAVIGASI PERPUS */}
+          {/* MENU TAB NAVIGASI PERPUS LENGKAP */}
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', backgroundColor: 'white', padding: '10px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', flexWrap: 'wrap' }}>
             <button 
               onClick={() => setTabPerpus('dashboard')} 
-              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'dashboard' ? '#10b981' : 'transparent', color: tabPerpus === 'dashboard' ? 'white' : '#475569', fontSize: '14px' }}
+              style={{ flex: 1, minWidth: '100px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'dashboard' ? '#10b981' : 'transparent', color: tabPerpus === 'dashboard' ? 'white' : '#475569', fontSize: '13px' }}
             >
               🏠 Dashboard
             </button>
             <button 
               onClick={() => setTabPerpus('profil')} 
-              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'profil' ? '#10b981' : 'transparent', color: tabPerpus === 'profil' ? 'white' : '#475569', fontSize: '14px' }}
+              style={{ flex: 1, minWidth: '100px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'profil' ? '#10b981' : 'transparent', color: tabPerpus === 'profil' ? 'white' : '#475569', fontSize: '13px' }}
             >
               🏢 Profil
             </button>
             <button 
               onClick={() => setTabPerpus('katalog')} 
-              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'katalog' ? '#10b981' : 'transparent', color: tabPerpus === 'katalog' ? 'white' : '#475569', fontSize: '14px' }}
+              style={{ flex: 1, minWidth: '100px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'katalog' ? '#10b981' : 'transparent', color: tabPerpus === 'katalog' ? 'white' : '#475569', fontSize: '13px' }}
             >
               📚 Katalog Buku
             </button>
+            
+            {/* TOMBOL TAB BARU: ID BUKU */}
+            <button 
+              onClick={() => setTabPerpus('eksemplar')} 
+              style={{ flex: 1, minWidth: '100px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'eksemplar' ? '#10b981' : 'transparent', color: tabPerpus === 'eksemplar' ? 'white' : '#475569', fontSize: '13px' }}
+            >
+              🏷️ ID Buku
+            </button>
+
             <button 
               onClick={() => setTabPerpus('scan')} 
-              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'scan' ? '#10b981' : 'transparent', color: tabPerpus === 'scan' ? 'white' : '#475569', fontSize: '14px' }}
+              style={{ flex: 1, minWidth: '100px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'scan' ? '#10b981' : 'transparent', color: tabPerpus === 'scan' ? 'white' : '#475569', fontSize: '13px' }}
             >
               📷 Sirkulasi
             </button>
             <button 
               onClick={() => setTabPerpus('rekap')} 
-              style={{ flex: 1, minWidth: '120px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'rekap' ? '#10b981' : 'transparent', color: tabPerpus === 'rekap' ? 'white' : '#475569', fontSize: '14px' }}
+              style={{ flex: 1, minWidth: '100px', padding: '10px', fontWeight: 'bold', borderRadius: '6px', border: 'none', cursor: 'pointer', transition: '0.2s', backgroundColor: tabPerpus === 'rekap' ? '#10b981' : 'transparent', color: tabPerpus === 'rekap' ? 'white' : '#475569', fontSize: '13px' }}
             >
               📉 Rekap Data
             </button>
@@ -130,6 +140,7 @@ export default function Dashboard({ user, onLogout }) {
           {tabPerpus === 'dashboard' && <DashboardPerpus />}
           {tabPerpus === 'profil' && <MenuPerpustakaan />}
           {tabPerpus === 'katalog' && <KatalogBuku />}
+          {tabPerpus === 'eksemplar' && <IdBuku />}
           {tabPerpus === 'scan' && <ScanPerpustakaan />}
           {tabPerpus === 'rekap' && <RekapPerpustakaan />}
           
