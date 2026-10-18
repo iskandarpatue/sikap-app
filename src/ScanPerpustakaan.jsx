@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
+import { Html5QrcodeScanner } from 'html5-qrcode'
 
 export default function ScanPerpustakaan() {
   const [mode, setMode] = useState('kunjungan') // kunjungan, pinjam, kembali
@@ -7,21 +8,57 @@ export default function ScanPerpustakaan() {
   const [isbn, setIsbn] = useState('')
   
   const [loading, setLoading] = useState(false)
-  const [pesan, setPesan] = useState(null) // { type: 'success' | 'error', text: '' }
+  const [pesan, setPesan] = useState(null)
   const [riwayatHariIni, setRiwayatHariIni] = useState([])
+
+  // State untuk Kamera
+  const [kameraAktif, setKameraAktif] = useState(false)
+  const [targetScan, setTargetScan] = useState('nisn') // 'nisn' atau 'isbn'
 
   const inputNisnRef = useRef(null)
   const inputIsbnRef = useRef(null)
 
   useEffect(() => {
     ambilRiwayatHariIni()
-    // Auto focus ke input saat mode berganti
-    if (mode === 'kunjungan' || mode === 'pinjam') {
-      setTimeout(() => inputNisnRef.current?.focus(), 100)
-    } else {
-      setTimeout(() => inputIsbnRef.current?.focus(), 100)
+  }, [])
+
+  // --- EFEK UNTUK MENGAKTIFKAN KAMERA ---
+  useEffect(() => {
+    let scanner = null;
+    
+    if (kameraAktif) {
+      scanner = new Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        false
+      );
+
+      scanner.render((decodedText) => {
+        // Jika berhasil scan, masukkan hasil ke input yang sesuai
+        if (targetScan === 'nisn') {
+          setNisn(decodedText)
+          if (mode === 'pinjam') setTargetScan('isbn') // Pindah target ke ISBN jika mode pinjam
+        } else {
+          setIsbn(decodedText)
+        }
+        
+        // Mainkan suara "beep" (opsional)
+        const audio = new Audio('https://www.soundjay.com/buttons/sounds/beep-07.mp3')
+        audio.play().catch(() => {})
+        
+        // Matikan kamera sejenak setelah berhasil scan
+        setKameraAktif(false)
+      }, (errorMessage) => {
+        // Abaikan error saat kamera sedang mencari barcode
+      });
     }
-  }, [mode])
+
+    return () => {
+      if (scanner) {
+        scanner.clear().catch(error => console.error("Gagal mematikan scanner", error));
+      }
+    }
+  }, [kameraAktif, targetScan, mode])
 
   // --- AMBIL RIWAYAT HARI INI ---
   const ambilRiwayatHariIni = async () => {
@@ -30,12 +67,11 @@ export default function ScanPerpustakaan() {
       .from('sirkulasi_perpus')
       .select('*')
       .order('id', { ascending: false })
-      .limit(10) // Ambil 10 aktivitas terakhir
+      .limit(10)
     
     if (data) setRiwayatHariIni(data)
   }
 
-  // --- HELPER: CARI MURID & BUKU ---
   const cariMurid = async (nisn_cari) => {
     const { data } = await supabase.from('students').select('*').eq('nisn', nisn_cari).single()
     return data
@@ -46,7 +82,7 @@ export default function ScanPerpustakaan() {
     return data
   }
 
-  // --- PROSES SUBMIT SCANNER ---
+  // --- PROSES SUBMIT ---
   const prosesScan = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -54,7 +90,6 @@ export default function ScanPerpustakaan() {
     const tglSekarang = new Date().toLocaleString('id-ID')
 
     try {
-      // 1. MODE KUNJUNGAN
       if (mode === 'kunjungan') {
         const murid = await cariMurid(nisn)
         if (!murid) throw new Error('Data murid tidak ditemukan!')
@@ -68,21 +103,17 @@ export default function ScanPerpustakaan() {
         }])
         if (error) throw error
         
-        setPesan({ type: 'success', text: `Selamat datang di perpustakaan, ${murid.nama}!` })
+        setPesan({ type: 'success', text: `Selamat datang, ${murid.nama}!` })
         setNisn('')
-        inputNisnRef.current?.focus()
       }
-
-      // 2. MODE PEMINJAMAN
       else if (mode === 'pinjam') {
         const murid = await cariMurid(nisn)
         if (!murid) throw new Error('Data murid tidak ditemukan!')
         
         const buku = await cariBuku(isbn)
-        if (!buku) throw new Error('Data buku tidak ditemukan di katalog!')
-        if (buku.stok <= 0) throw new Error('Maaf, stok buku habis/sedang dipinjam semua.')
+        if (!buku) throw new Error('Data buku tidak ditemukan!')
+        if (buku.stok <= 0) throw new Error('Stok buku habis.')
 
-        // Catat di sirkulasi
         const { error: errSirkulasi } = await supabase.from('sirkulasi_perpus').insert([{
           nisn_murid: murid.nisn,
           nama_murid: murid.nama,
@@ -94,21 +125,14 @@ export default function ScanPerpustakaan() {
         }])
         if (errSirkulasi) throw errSirkulasi
 
-        // Kurangi stok buku
         await supabase.from('buku').update({ stok: buku.stok - 1 }).eq('isbn', buku.isbn)
-
-        setPesan({ type: 'success', text: `Sukses! "${buku.judul}" berhasil dipinjam oleh ${murid.nama}.` })
-        setNisn('')
-        setIsbn('')
-        inputNisnRef.current?.focus()
+        setPesan({ type: 'success', text: `"${buku.judul}" dipinjam oleh ${murid.nama}.` })
+        setNisn(''); setIsbn(''); setTargetScan('nisn')
       }
-
-      // 3. MODE PENGEMBALIAN
       else if (mode === 'kembali') {
         const buku = await cariBuku(isbn)
-        if (!buku) throw new Error('Data buku tidak dikenali sistem!')
+        if (!buku) throw new Error('Data buku tidak dikenali!')
 
-        // Cari data pinjaman yang masih aktif (belum dikembalikan)
         const { data: dataPinjam } = await supabase
           .from('sirkulasi_perpus')
           .select('*')
@@ -118,23 +142,18 @@ export default function ScanPerpustakaan() {
           .limit(1)
           .single()
 
-        if (!dataPinjam) throw new Error('Buku ini tidak sedang dipinjam oleh siapapun.')
+        if (!dataPinjam) throw new Error('Buku ini tidak sedang dipinjam.')
 
-        // Update status di sirkulasi
         const { error: errUpdate } = await supabase.from('sirkulasi_perpus').update({
           status: 'Dikembalikan',
           tgl_kembali: tglSekarang
         }).eq('id', dataPinjam.id)
         if (errUpdate) throw errUpdate
 
-        // Tambah kembali stok buku
         await supabase.from('buku').update({ stok: buku.stok + 1 }).eq('isbn', buku.isbn)
-
-        setPesan({ type: 'success', text: `Buku "${buku.judul}" berhasil dikembalikan oleh ${dataPinjam.nama_murid}. Stok telah diupdate.` })
+        setPesan({ type: 'success', text: `"${buku.judul}" dikembalikan oleh ${dataPinjam.nama_murid}.` })
         setIsbn('')
-        inputIsbnRef.current?.focus()
       }
-
     } catch (err) {
       setPesan({ type: 'error', text: err.message })
     }
@@ -143,121 +162,87 @@ export default function ScanPerpustakaan() {
     ambilRiwayatHariIni()
   }
 
-  // --- FUNGSI PINDAH FOKUS INPUT ---
-  const handleNisnEnter = (e) => {
-    // Jika di mode pinjam, saat tekan enter di NISN, pindah fokus ke ISBN
-    if (e.key === 'Enter' && mode === 'pinjam' && nisn.trim() !== '') {
-      e.preventDefault()
-      inputIsbnRef.current?.focus()
-    }
-  }
-
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
       
-      {/* KOTAK NAVIGASI MODE */}
+      {/* MODE NAVIGASI */}
       <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', flexWrap: 'wrap' }}>
-        <button onClick={() => { setMode('kunjungan'); setPesan(null) }} style={{ flex: 1, padding: '20px', borderRadius: '10px', border: mode === 'kunjungan' ? '3px solid #3b82f6' : '1px solid #d1d5db', backgroundColor: mode === 'kunjungan' ? '#eff6ff' : 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', transition: '0.2s' }}>
-          <span style={{ fontSize: '30px' }}>👋</span>
-          <span style={{ fontWeight: 'bold', fontSize: '16px', color: mode === 'kunjungan' ? '#1d4ed8' : '#4b5563' }}>Mode Kunjungan</span>
-        </button>
-        
-        <button onClick={() => { setMode('pinjam'); setPesan(null) }} style={{ flex: 1, padding: '20px', borderRadius: '10px', border: mode === 'pinjam' ? '3px solid #f59e0b' : '1px solid #d1d5db', backgroundColor: mode === 'pinjam' ? '#fffbeb' : 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', transition: '0.2s' }}>
-          <span style={{ fontSize: '30px' }}>📖</span>
-          <span style={{ fontWeight: 'bold', fontSize: '16px', color: mode === 'pinjam' ? '#b45309' : '#4b5563' }}>Mode Peminjaman</span>
-        </button>
-        
-        <button onClick={() => { setMode('kembali'); setPesan(null) }} style={{ flex: 1, padding: '20px', borderRadius: '10px', border: mode === 'kembali' ? '3px solid #10b981' : '1px solid #d1d5db', backgroundColor: mode === 'kembali' ? '#ecfdf5' : 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', transition: '0.2s' }}>
-          <span style={{ fontSize: '30px' }}>🔄</span>
-          <span style={{ fontWeight: 'bold', fontSize: '16px', color: mode === 'kembali' ? '#047857' : '#4b5563' }}>Mode Pengembalian</span>
-        </button>
+        <button onClick={() => { setMode('kunjungan'); setPesan(null); setTargetScan('nisn'); setKameraAktif(false) }} style={{ flex: 1, padding: '15px', borderRadius: '10px', border: mode === 'kunjungan' ? '3px solid #3b82f6' : '1px solid #d1d5db', backgroundColor: mode === 'kunjungan' ? '#eff6ff' : 'white', cursor: 'pointer', fontWeight: 'bold' }}>👋 Mode Kunjungan</button>
+        <button onClick={() => { setMode('pinjam'); setPesan(null); setTargetScan('nisn'); setKameraAktif(false) }} style={{ flex: 1, padding: '15px', borderRadius: '10px', border: mode === 'pinjam' ? '3px solid #f59e0b' : '1px solid #d1d5db', backgroundColor: mode === 'pinjam' ? '#fffbeb' : 'white', cursor: 'pointer', fontWeight: 'bold' }}>📖 Mode Peminjaman</button>
+        <button onClick={() => { setMode('kembali'); setPesan(null); setTargetScan('isbn'); setKameraAktif(false) }} style={{ flex: 1, padding: '15px', borderRadius: '10px', border: mode === 'kembali' ? '3px solid #10b981' : '1px solid #d1d5db', backgroundColor: mode === 'kembali' ? '#ecfdf5' : 'white', cursor: 'pointer', fontWeight: 'bold' }}>🔄 Mode Pengembalian</button>
       </div>
 
       <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
+        
         {/* PANEL SCANNER */}
         <div style={{ flex: 1.5, minWidth: '350px' }}>
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e5e7eb' }}>
-            <h2 style={{ margin: '0 0 20px 0', color: '#1f2937', textAlign: 'center' }}>
-              {mode === 'kunjungan' && 'Arahkan Scanner ke Kartu Murid'}
-              {mode === 'pinjam' && 'Scan Kartu Murid, Lalu Scan Buku'}
-              {mode === 'kembali' && 'Arahkan Scanner ke Barcode Buku'}
-            </h2>
+            
+            {/* AREA KAMERA SCANNER */}
+            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+              <button 
+                onClick={() => setKameraAktif(!kameraAktif)}
+                style={{ padding: '10px 20px', backgroundColor: kameraAktif ? '#ef4444' : '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '10px' }}
+              >
+                {kameraAktif ? '⏹️ Matikan Kamera' : '📷 Aktifkan Kamera HP/Laptop'}
+              </button>
+              
+              {kameraAktif && (
+                <div style={{ border: '2px dashed #cbd5e1', padding: '10px', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                  <p style={{ margin: '0 0 10px 0', fontWeight: 'bold', color: '#475569' }}>
+                    Arahkan kamera ke Barcode/QR Code {targetScan === 'nisn' ? 'Kartu Murid' : 'Buku'}
+                  </p>
+                  <div id="reader" style={{ width: '100%', maxWidth: '400px', margin: '0 auto' }}></div>
+                </div>
+              )}
+            </div>
 
             <form onSubmit={prosesScan} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
               {(mode === 'kunjungan' || mode === 'pinjam') && (
                 <div>
-                  <label style={{ fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '8px' }}>Scan NISN Murid</label>
-                  <input 
-                    ref={inputNisnRef}
-                    type="text" 
-                    value={nisn} 
-                    onChange={(e) => setNisn(e.target.value)}
-                    onKeyDown={handleNisnEnter}
-                    placeholder="Contoh: 0111121747..." 
-                    style={{ width: '100%', padding: '15px', fontSize: '20px', borderRadius: '8px', border: '2px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#f8fafc', outlineColor: '#3b82f6' }} 
-                    required 
-                  />
+                  <label style={{ fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span>Scan/Ketik NISN Murid</span>
+                    {mode === 'pinjam' && <button type="button" onClick={() => setTargetScan('nisn')} style={{ fontSize: '11px', padding: '2px 8px', cursor: 'pointer' }}>Fokus Kamera ke Sini</button>}
+                  </label>
+                  <input ref={inputNisnRef} type="text" value={nisn} onChange={(e) => setNisn(e.target.value)} style={{ width: '100%', padding: '15px', fontSize: '20px', borderRadius: '8px', border: targetScan === 'nisn' ? '3px solid #3b82f6' : '1px solid #cbd5e1', boxSizing: 'border-box' }} required />
                 </div>
               )}
 
               {(mode === 'pinjam' || mode === 'kembali') && (
                 <div>
-                  <label style={{ fontWeight: 'bold', color: '#4b5563', display: 'block', marginBottom: '8px' }}>Scan ISBN / Kode Buku</label>
-                  <input 
-                    ref={inputIsbnRef}
-                    type="text" 
-                    value={isbn} 
-                    onChange={(e) => setIsbn(e.target.value)}
-                    placeholder="Contoh: 9786022828..." 
-                    style={{ width: '100%', padding: '15px', fontSize: '20px', borderRadius: '8px', border: '2px solid #cbd5e1', boxSizing: 'border-box', backgroundColor: '#f8fafc', outlineColor: '#f59e0b' }} 
-                    required 
-                  />
+                  <label style={{ fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span>Scan/Ketik ISBN Buku</span>
+                    {mode === 'pinjam' && <button type="button" onClick={() => setTargetScan('isbn')} style={{ fontSize: '11px', padding: '2px 8px', cursor: 'pointer' }}>Fokus Kamera ke Sini</button>}
+                  </label>
+                  <input ref={inputIsbnRef} type="text" value={isbn} onChange={(e) => setIsbn(e.target.value)} style={{ width: '100%', padding: '15px', fontSize: '20px', borderRadius: '8px', border: targetScan === 'isbn' ? '3px solid #f59e0b' : '1px solid #cbd5e1', boxSizing: 'border-box' }} required />
                 </div>
               )}
 
-              {/* Tombol Tersembunyi (Trigger dari Scanner Enter) */}
-              <button type="submit" disabled={loading} style={{ padding: '15px', backgroundColor: '#1f2937', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', marginTop: '10px' }}>
-                {loading ? 'Memproses Data...' : 'PROSES (Atau Tekan Enter)'}
+              <button type="submit" disabled={loading} style={{ padding: '15px', backgroundColor: '#1f2937', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>
+                {loading ? 'Memproses...' : 'PROSES DATA'}
               </button>
-
             </form>
 
-            {/* AREA PESAN FEEDBACK */}
             {pesan && (
-              <div style={{ marginTop: '25px', padding: '15px', borderRadius: '8px', backgroundColor: pesan.type === 'success' ? '#dcfce7' : '#fee2e2', color: pesan.type === 'success' ? '#166534' : '#991b1b', border: `1px solid ${pesan.type === 'success' ? '#86efac' : '#fca5a5'}` }}>
-                <p style={{ margin: 0, fontWeight: 'bold', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {pesan.type === 'success' ? '✅' : '❌'} {pesan.text}
-                </p>
+              <div style={{ marginTop: '20px', padding: '15px', borderRadius: '8px', backgroundColor: pesan.type === 'success' ? '#dcfce7' : '#fee2e2', color: pesan.type === 'success' ? '#166534' : '#991b1b' }}>
+                {pesan.text}
               </div>
             )}
           </div>
         </div>
 
         {/* PANEL RIWAYAT AKTIVITAS TERAKHIR */}
-        <div style={{ flex: 1, minWidth: '300px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '1px solid #e5e7eb', height: 'fit-content' }}>
-          <h3 style={{ margin: '0 0 15px 0', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '8px' }}>🕒 Aktivitas Terakhir Hari Ini</h3>
-          
-          {riwayatHariIni.length === 0 ? (
-            <p style={{ color: '#9ca3af', textAlign: 'center', margin: '30px 0' }}>Belum ada aktivitas sirkulasi.</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {riwayatHariIni.map((riwayat) => (
-                <div key={riwayat.id} style={{ padding: '12px', border: '1px solid #f1f5f9', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <span style={{ fontWeight: 'bold', fontSize: '14px', color: '#1e293b' }}>{riwayat.nama_murid}</span>
-                    <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '10px', backgroundColor: riwayat.jenis_layanan === 'Kunjungan' ? '#e0f2fe' : riwayat.status === 'Dipinjam' ? '#fef3c7' : '#dcfce7', color: riwayat.jenis_layanan === 'Kunjungan' ? '#0369a1' : riwayat.status === 'Dipinjam' ? '#92400e' : '#166534', fontWeight: 'bold' }}>
-                      {riwayat.jenis_layanan === 'Kunjungan' ? 'Tamu' : riwayat.status}
-                    </span>
-                  </div>
-                  {riwayat.judul_buku && (
-                    <p style={{ margin: '0 0 5px 0', fontSize: '13px', color: '#475569' }}>📖 {riwayat.judul_buku}</p>
-                  )}
-                  <p style={{ margin: 0, fontSize: '11px', color: '#94a3b8' }}>{riwayat.tgl_kembali ? riwayat.tgl_kembali : riwayat.tgl_pinjam}</p>
-                </div>
-              ))}
+        <div style={{ flex: 1, minWidth: '300px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', height: 'fit-content' }}>
+          <h3 style={{ margin: '0 0 15px 0' }}>🕒 Aktivitas Terakhir</h3>
+          {riwayatHariIni.map((riwayat) => (
+            <div key={riwayat.id} style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <strong>{riwayat.nama_murid}</strong>
+                <span>{riwayat.status}</span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b' }}>{riwayat.judul_buku || 'Kunjungan'}</div>
             </div>
-          )}
+          ))}
         </div>
       </div>
     </div>
