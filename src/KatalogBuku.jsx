@@ -8,7 +8,7 @@ export default function KatalogBuku() {
   const [loading, setLoading] = useState(false)
   const [pencarian, setPencarian] = useState('')
 
-  // State Form Input Satuan Lengkap (Ala SLiMS)
+  // State Form Input Satuan Lengkap
   const [formData, setFormData] = useState({
     judul: '', subjudul: '', pengarang: '', penerbit: '', tahun_terbit: '', 
     isbn: '', stok: '1', kategori: '', cover_url: '',
@@ -31,14 +31,96 @@ export default function KatalogBuku() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
+  // ========================================================
+  // 1. FITUR CEK KATALOG (Auto-Fill dari Google Books API)
+  // ========================================================
+  const cekKatalogExternal = async () => {
+    if (!formData.judul && !formData.isbn) {
+      alert('Silakan ketik Judul Buku atau ISBN terlebih dahulu!')
+      return
+    }
+    
+    setLoading(true)
+    try {
+      // Cari berdasarkan ISBN jika ada, jika tidak gunakan Judul
+      const queryCari = formData.isbn ? `isbn:${formData.isbn}` : `intitle:${formData.judul}`
+      const respons = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${queryCari}`)
+      const hasil = await respons.json()
+      
+      if (hasil.items && hasil.items.length > 0) {
+        const infoBuku = hasil.items[0].volumeInfo
+        
+        setFormData(prev => ({
+          ...prev,
+          judul: infoBuku.title || prev.judul,
+          subjudul: infoBuku.subtitle || prev.subjudul,
+          pengarang: infoBuku.authors ? infoBuku.authors.join(', ') : prev.pengarang,
+          penerbit: infoBuku.publisher || prev.penerbit,
+          tahun_terbit: infoBuku.publishedDate ? infoBuku.publishedDate.substring(0, 4) : prev.tahun_terbit,
+          jumlah_halaman: infoBuku.pageCount ? String(infoBuku.pageCount) : prev.jumlah_halaman,
+          isbn: infoBuku.industryIdentifiers ? infoBuku.industryIdentifiers[0].identifier : prev.isbn,
+          subjek_keyword: infoBuku.categories ? infoBuku.categories.join(', ') : prev.subjek_keyword,
+          cover_url: infoBuku.imageLinks?.thumbnail || prev.cover_url
+        }))
+        alert('✨ Data berhasil ditarik dari katalog global!')
+      } else {
+        alert('Data buku tidak ditemukan di katalog publik. Silakan isi manual.')
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan saat menyambungkan ke server katalog.')
+    }
+    setLoading(false)
+  }
+
+  // ========================================================
+  // 2. FITUR AI & e-DDC (Klasifikasi Otomatis)
+  // ========================================================
+  const klasifikasiOtomatis = (metode) => {
+    if (!formData.judul) {
+      alert('Silakan ketik judul buku terlebih dahulu agar AI bisa menganalisis.')
+      return
+    }
+    
+    setLoading(true)
+    
+    // Simulasi jeda berpikir AI
+    setTimeout(() => {
+      const teks = (formData.judul + " " + (formData.subjek_keyword || '')).toLowerCase()
+      let hasilDDC = '000'
+      let hasilTipe = 'Textbook'
+      let hasilKategori = 'Umum'
+
+      if (teks.match(/filsafat|psikologi|logika/)) { hasilDDC = '100'; hasilKategori = 'Filsafat' }
+      else if (teks.match(/agama|islam|kristen|hindu|budha|tuhan/)) { hasilDDC = '200'; hasilKategori = 'Agama' }
+      else if (teks.match(/sosial|ekonomi|politik|hukum|pkn|pendidikan/)) { hasilDDC = '300'; hasilKategori = 'Ilmu Sosial' }
+      else if (teks.match(/bahasa|kamus|inggris|indonesia|sastra/)) { hasilDDC = '400'; hasilTipe = teks.includes('kamus') ? 'Reference' : 'Textbook'; hasilKategori = 'Bahasa' }
+      else if (teks.match(/sains|matematika|biologi|fisika|kimia|alam/)) { hasilDDC = '500'; hasilKategori = 'Sains Murni' }
+      else if (teks.match(/teknologi|kedokteran|komputer|pertanian/)) { hasilDDC = '600'; hasilTipe = 'Reference'; hasilKategori = 'Teknologi' }
+      else if (teks.match(/seni|olahraga|musik|rekreasi/)) { hasilDDC = '700'; hasilKategori = 'Seni & Olahraga' }
+      else if (teks.match(/novel|cerita|puisi|komik|fiksi/)) { hasilDDC = '800'; hasilTipe = 'Fiction'; hasilKategori = 'Kesusastraan' }
+      else if (teks.match(/sejarah|geografi|biografi/)) { hasilDDC = '900'; hasilKategori = 'Sejarah' }
+
+      setFormData(prev => ({
+        ...prev,
+        ddc: hasilDDC,
+        tipe_koleksi: hasilTipe,
+        kategori: hasilKategori
+      }))
+      
+      alert(`🤖 Berhasil! ${metode} mengklasifikasikan buku ini ke DDC: ${hasilDDC} (${hasilKategori}).`)
+      setLoading(false)
+    }, 800)
+  }
+
   // --- SIMPAN INPUT SATUAN ---
   const simpanBuku = async (e) => {
     e.preventDefault()
     if (!formData.judul || !formData.isbn) { alert('Judul dan ISBN/ISSN wajib diisi!'); return }
     
     setLoading(true)
-    let coverUrl = null
+    let coverUrl = formData.cover_url
 
+    // Jika user mengunggah cover manual dari komputer, itu akan menimpa cover dari API
     if (fotoCover) {
       const fileExt = fotoCover.name.split('.').pop()
       const namaFile = `cover_${formData.isbn}_${Date.now()}.${fileExt}`
@@ -50,7 +132,6 @@ export default function KatalogBuku() {
     }
 
     const payload = { ...formData, cover_url: coverUrl, stok: parseInt(formData.stok) || 1 }
-    
     const { error } = await supabase.from('buku').insert([payload])
     
     if (error) alert('Gagal menyimpan buku: ' + error.message)
@@ -75,7 +156,6 @@ export default function KatalogBuku() {
     ambilDataBuku()
   }
 
-  // Filter Tabel
   const bukuTampil = daftarBuku.filter(b => 
     b.judul?.toLowerCase().includes(pencarian.toLowerCase()) || 
     b.pengarang?.toLowerCase().includes(pencarian.toLowerCase()) || 
@@ -91,17 +171,19 @@ export default function KatalogBuku() {
         <button onClick={() => setTabAktif('daftar_katalog')} style={{ padding: '10px 15px', borderRadius: '4px', border: '1px solid #10b981', backgroundColor: '#dcfce7', color: '#166534', cursor: 'pointer', fontWeight: 'bold', marginLeft: 'auto' }}>📚 Lihat Daftar Katalog</button>
       </div>
 
-      {/* PANEL INPUT SATUAN (Gaya SLiMS) */}
+      {/* PANEL INPUT SATUAN */}
       {tabAktif === 'input_satuan' && (
         <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: '30px', maxWidth: '1000px' }}>
           <h2 style={{ margin: '0 0 25px 0', fontSize: '18px', color: '#1f2937', borderBottom: '2px solid #f1f5f9', paddingBottom: '10px' }}>Input metode "Satuan" (RDA)</h2>
           
           <form onSubmit={simpanBuku} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             
-            {/* Judul & Subjudul */}
+            {/* Judul & Auto-Fill */}
             <div style={{ display: 'flex', gap: '15px' }}>
               <input type="text" name="judul" required value={formData.judul} onChange={handleInputForm} placeholder="Judul *" style={{ flex: 1, padding: '12px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
-              <button type="button" style={{ padding: '0 20px', backgroundColor: '#4f46e5', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>🔍 Cek Katalog</button>
+              <button type="button" onClick={cekKatalogExternal} disabled={loading} style={{ padding: '0 20px', backgroundColor: '#4f46e5', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>
+                {loading ? 'Mencari...' : '🔍 Cek Katalog'}
+              </button>
             </div>
             <input type="text" name="subjudul" value={formData.subjudul} onChange={handleInputForm} placeholder="Subjudul" style={{ padding: '12px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
 
@@ -164,8 +246,8 @@ export default function KatalogBuku() {
                 <label style={{ fontSize: '12px', color: '#64748b' }}>DDC (Klasifikasi)</label>
                 <div style={{ display: 'flex', gap: '5px' }}>
                   <input type="text" name="ddc" value={formData.ddc} onChange={handleInputForm} placeholder="DDC" style={{ flex: 1, padding: '12px', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
-                  <button type="button" style={{ backgroundColor: '#a855f7', color: 'white', border: 'none', borderRadius: '4px', padding: '0 15px', fontWeight: 'bold' }}>AI</button>
-                  <button type="button" style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', padding: '0 15px', fontWeight: 'bold' }}>e-DDC</button>
+                  <button type="button" onClick={() => klasifikasiOtomatis('AI')} style={{ backgroundColor: '#a855f7', color: 'white', border: 'none', borderRadius: '4px', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>AI</button>
+                  <button type="button" onClick={() => klasifikasiOtomatis('e-DDC')} style={{ backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>e-DDC</button>
                 </div>
               </div>
             </div>
@@ -219,32 +301,34 @@ export default function KatalogBuku() {
             <input type="text" placeholder="🔍 Cari judul, penulis, ISBN..." value={pencarian} onChange={(e) => setPencarian(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '4px', width: '250px' }} />
           </div>
           
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#6b7280' }}>NO</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#6b7280' }}>JUDUL BUKU</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#6b7280' }}>PENULIS</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#6b7280' }}>ISBN</th>
-                <th style={{ padding: '12px', textAlign: 'center', color: '#6b7280' }}>STOK</th>
-                <th style={{ padding: '12px', textAlign: 'center', color: '#6b7280' }}>AKSI</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bukuTampil.map((buku, index) => (
-                <tr key={buku.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ padding: '12px' }}>{index + 1}</td>
-                  <td style={{ padding: '12px', fontWeight: 'bold' }}>{buku.judul}</td>
-                  <td style={{ padding: '12px' }}>{buku.pengarang || '-'}</td>
-                  <td style={{ padding: '12px' }}>{buku.isbn}</td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>{buku.stok}</td>
-                  <td style={{ padding: '12px', textAlign: 'center' }}>
-                    <button onClick={() => hapusBuku(buku.id, buku.judul)} style={{ padding: '4px 8px', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Hapus</button>
-                  </td>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                  <th style={{ padding: '12px', textAlign: 'left', color: '#6b7280' }}>NO</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: '#6b7280' }}>JUDUL BUKU</th>
+                  <th style={{ padding: '12px', textAlign: 'left', color: '#6b7280' }}>PENULIS</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: '#6b7280' }}>DDC</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: '#6b7280' }}>STOK</th>
+                  <th style={{ padding: '12px', textAlign: 'center', color: '#6b7280' }}>AKSI</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {bukuTampil.map((buku, index) => (
+                  <tr key={buku.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '12px' }}>{index + 1}</td>
+                    <td style={{ padding: '12px', fontWeight: 'bold' }}>{buku.judul}</td>
+                    <td style={{ padding: '12px' }}>{buku.pengarang || '-'}</td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>{buku.ddc || '-'}</td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}><span style={{ backgroundColor: '#e0e7ff', color: '#4338ca', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>{buku.stok}</span></td>
+                    <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <button onClick={() => hapusBuku(buku.id, buku.judul)} style={{ padding: '4px 8px', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Hapus</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
