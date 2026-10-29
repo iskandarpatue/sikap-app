@@ -36,10 +36,9 @@ export default function Login({ onLoginSukses }) {
       }
 
       // 3. Jika akun ditemukan, sesuaikan datanya
-      // Pastikan ada kolom 'role' dan 'nama_lengkap' / 'nama' di tabel akun_petugas Bapak
       const userData = {
         role: data.role, 
-        nama_lengkap: data.nama_lengkap || data.nama || username
+        nama_lengkap: data.nama_lengkap || data.username
       }
 
       // 4. Simpan sesi dan masuk ke dashboard
