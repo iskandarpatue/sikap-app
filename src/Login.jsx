@@ -1,30 +1,55 @@
 import { useState } from 'react'
+import { supabase } from './supabase' // Tambahan import Supabase
+import logoSekolah from './assets/logo_sekolah.ico'
 
 export default function Login({ onLoginSukses }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
     setError('')
+    setLoading(true)
 
-    let userData = null
+    try {
+      // 1. Cek ke database Supabase (Ganti 'users' jika nama tabel Bapak berbeda)
+      const { data, error: err } = await supabase
+        .from('users') 
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .single()
 
-    // Silakan sesuaikan password-nya jika perlu
-    if (username === 'admin' && password === 'admin123') {
-      userData = { role: 'admin', nama_lengkap: 'Administrator Utama' }
-    } else if (username === 'guru' && password === 'guru123') {
-      userData = { role: 'guru', nama_lengkap: 'Guru Piket SMAN 1' }
-    } else if (username === 'perpus' && password === 'perpus123') {
-      userData = { role: 'perpus', nama_lengkap: 'Pustakawan SMAN 1' }
-    } else {
-      setError('Username atau Password salah!')
-      return
+      // 2. Jika akun tidak ditemukan di database
+      if (err || !data) {
+        // PINTU DARURAT (Backdoor) untuk Admin jika database bermasalah/kosong
+        if (username === 'admin' && password === 'admin123') {
+          const adminData = { role: 'admin', nama_lengkap: 'Administrator Utama' }
+          localStorage.setItem('sesiSikap', JSON.stringify(adminData))
+          onLoginSukses(adminData)
+          setLoading(false)
+          return
+        }
+        throw new Error('Username atau Password tidak ditemukan di sistem!')
+      }
+
+      // 3. Jika akun ditemukan di database, ekstrak datanya
+      const userData = {
+        role: data.role, // Pastikan ada kolom 'role' (admin/guru/perpus) di tabel
+        nama_lengkap: data.nama_lengkap || data.nama || username
+      }
+
+      // 4. Simpan sesi dan masuk ke dashboard
+      localStorage.setItem('sesiSikap', JSON.stringify(userData))
+      onLoginSukses(userData)
+
+    } catch (err) {
+      setError(err.message)
     }
-
-    localStorage.setItem('sesiSikap', JSON.stringify(userData))
-    onLoginSukses(userData)
+    
+    setLoading(false)
   }
 
   return (
@@ -33,9 +58,8 @@ export default function Login({ onLoginSukses }) {
         
         {/* BAGIAN HEADER & LOGO */}
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          {/* Memanggil gambar langsung dari folder public */}
           <img 
-            src="/logo_sekolah.ico" 
+            src={logoSekolah} 
             alt="Logo SMAN 1 Batudaa Pantai" 
             style={{ width: '110px', height: 'auto', marginBottom: '15px' }} 
           />
@@ -79,8 +103,8 @@ export default function Login({ onLoginSukses }) {
             />
           </div>
 
-          <button type="submit" style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', marginTop: '10px', transition: '0.2s', boxShadow: '0 2px 4px rgba(37, 99, 235, 0.3)' }}>
-            MASUK
+          <button type="submit" disabled={loading} style={{ width: '100%', padding: '12px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold', fontSize: '16px', cursor: loading ? 'not-allowed' : 'pointer', marginTop: '10px', transition: '0.2s', boxShadow: '0 2px 4px rgba(37, 99, 235, 0.3)' }}>
+            {loading ? 'MEMERIKSA DATA...' : 'MASUK'}
           </button>
         </form>
         
