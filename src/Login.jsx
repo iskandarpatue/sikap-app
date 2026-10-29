@@ -16,7 +16,7 @@ export default function Login({ onLoginSukses }) {
     try {
       // 1. Cek ke database Supabase (Ganti 'users' jika nama tabel Bapak berbeda)
       const { data, error: err } = await supabase
-        .from('users') 
+        .from('petugas') 
         .select('*')
         .eq('username', username)
         .eq('password', password)
