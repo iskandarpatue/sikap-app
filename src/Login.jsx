@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import logoSekolah from './assets/logo_sekolah.ico' // Memanggil logo dari folder assets
 
 export default function Login({ onLoginSukses }) {
   const [username, setUsername] = useState('')
@@ -10,10 +9,9 @@ export default function Login({ onLoginSukses }) {
     e.preventDefault()
     setError('')
 
-    // Data role untuk login
     let userData = null
 
-    // Silakan sesuaikan password-nya jika sebelumnya Bapak menggunakan password lain
+    // Silakan sesuaikan password-nya jika perlu
     if (username === 'admin' && password === 'admin123') {
       userData = { role: 'admin', nama_lengkap: 'Administrator Utama' }
     } else if (username === 'guru' && password === 'guru123') {
@@ -25,10 +23,7 @@ export default function Login({ onLoginSukses }) {
       return
     }
 
-    // Simpan sesi ke LocalStorage agar tidak perlu login terus menerus
     localStorage.setItem('sesiSikap', JSON.stringify(userData))
-    
-    // Panggil fungsi sukses untuk masuk ke Dashboard
     onLoginSukses(userData)
   }
 
@@ -38,8 +33,9 @@ export default function Login({ onLoginSukses }) {
         
         {/* BAGIAN HEADER & LOGO */}
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          {/* Memanggil gambar langsung dari folder public */}
           <img 
-            src={logoSekolah} 
+            src="/logo_sekolah.ico" 
             alt="Logo SMAN 1 Batudaa Pantai" 
             style={{ width: '110px', height: 'auto', marginBottom: '15px' }} 
           />
