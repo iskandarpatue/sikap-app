@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from './supabase' // Tambahan import Supabase
+import { supabase } from './supabase' 
 import logoSekolah from './assets/logo_sekolah.ico'
 
 export default function Login({ onLoginSukses }) {
@@ -14,9 +14,9 @@ export default function Login({ onLoginSukses }) {
     setLoading(true)
 
     try {
-      // 1. Cek ke database Supabase (Ganti 'users' jika nama tabel Bapak berbeda)
+      // 1. Cek ke database Supabase menggunakan tabel 'akun_petugas'
       const { data, error: err } = await supabase
-        .from('petugas') 
+        .from('akun_petugas') 
         .select('*')
         .eq('username', username)
         .eq('password', password)
@@ -24,7 +24,7 @@ export default function Login({ onLoginSukses }) {
 
       // 2. Jika akun tidak ditemukan di database
       if (err || !data) {
-        // PINTU DARURAT (Backdoor) untuk Admin jika database bermasalah/kosong
+        // PINTU DARURAT (Backdoor) untuk Admin
         if (username === 'admin' && password === 'admin123') {
           const adminData = { role: 'admin', nama_lengkap: 'Administrator Utama' }
           localStorage.setItem('sesiSikap', JSON.stringify(adminData))
@@ -35,9 +35,10 @@ export default function Login({ onLoginSukses }) {
         throw new Error('Username atau Password tidak ditemukan di sistem!')
       }
 
-      // 3. Jika akun ditemukan di database, ekstrak datanya
+      // 3. Jika akun ditemukan, sesuaikan datanya
+      // Pastikan ada kolom 'role' dan 'nama_lengkap' / 'nama' di tabel akun_petugas Bapak
       const userData = {
-        role: data.role, // Pastikan ada kolom 'role' (admin/guru/perpus) di tabel
+        role: data.role, 
         nama_lengkap: data.nama_lengkap || data.nama || username
       }
 
