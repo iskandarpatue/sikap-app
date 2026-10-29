@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { supabase } from './supabase' 
-import logoSekolah from './assets/logo_sekolah.ico'
 
 export default function Login({ onLoginSukses }) {
   const [username, setUsername] = useState('')
@@ -56,10 +55,10 @@ export default function Login({ onLoginSukses }) {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'sans-serif' }}>
       <div style={{ backgroundColor: 'white', padding: '40px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', width: '100%', maxWidth: '400px' }}>
         
-        {/* BAGIAN HEADER & LOGO */}
+        {/* BAGIAN HEADER & LOGO (MEMANGGIL DARI FOLDER PUBLIC) */}
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
           <img 
-            src={logoSekolah} 
+            src="/logo_sekolah.ico" 
             alt="Logo SMAN 1 Batudaa Pantai" 
             style={{ width: '110px', height: 'auto', marginBottom: '15px' }} 
           />
